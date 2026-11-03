@@ -39,3 +39,36 @@ The client recognizes the documented API error shapes and reports safe semantic 
 ## Live verification status
 
 No live request has been made in this environment because `GNANI_API_KEY` is not configured and no private staged recording is present. The automated tests use `httpx.MockTransport` and do not consume Gnani credits.
+
+## FastAPI upload endpoint
+
+Milestone 02 exposes:
+
+```text
+POST /api/v1/transcriptions
+```
+
+Send one multipart form field named `audio`:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/transcriptions \
+  -F "audio=@recording.wav"
+```
+
+The endpoint accepts the documented extensions and matching audio media types, rejects empty and oversized files, validates WAV structure and duration, and uses a temporary file that is deleted after transcription. The default local upload limit is 25 MiB. The endpoint does not make a health-check request to Gnani.
+
+Successful response fields mirror metadata actually returned by Prisma:
+
+```json
+{
+  "success": true,
+  "request_id": "request-id-from-gnani",
+  "transcript": "ನನಗೆ chest pain ಇದೆ",
+  "detected_language_code": "kn-IN",
+  "model": "prisma-v3.0",
+  "processing_time": 0.42,
+  "end_to_end_latency": 0.55
+}
+```
+
+Fields absent from the upstream response are omitted from the JSON response. Error responses use a stable `success: false` envelope with an error code and safe message. Swagger documentation is available at `/docs` when FastAPI is running.

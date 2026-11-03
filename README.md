@@ -4,9 +4,9 @@ Naadi is a decision-support prototype for emergency call-takers handling multili
 
 Naadi is not a medical device, an emergency service, or an integration with 108/112 infrastructure.
 
-## Milestone 01 status
+## Milestone 02 status
 
-This milestone implements the initial backend foundation and a standalone Gnani Prisma REST transcription client. It does not include the React frontend, realtime audio streaming, SQLite persistence, emergency rules, or Timbre text-to-speech.
+This milestone adds a FastAPI staged-audio upload endpoint on top of the initial backend foundation and standalone Gnani Prisma REST transcription client. It does not include the React frontend, realtime audio streaming, SQLite persistence, emergency rules, or Timbre text-to-speech.
 
 The immediate live objective is to transcribe a staged Kannada-English recording with Gnani Prisma v3.0.
 
@@ -46,12 +46,14 @@ python -m pytest backend/tests -q
 
 All external API calls in the test suite are mocked; tests do not need credentials or consume Gnani credits.
 
-## Run the FastAPI foundation
+## Run FastAPI
 
 ```bash
 source .venv/bin/activate
 uvicorn backend.app.main:app --reload
 ```
+
+Open Swagger at <http://127.0.0.1:8000/docs>.
 
 Health check:
 
@@ -60,6 +62,39 @@ curl http://127.0.0.1:8000/health
 ```
 
 The response reports application metadata and whether `GNANI_API_KEY` is configured. It never returns the key.
+
+The API health endpoint is also available at:
+
+```bash
+curl http://127.0.0.1:8000/api/v1/health
+```
+
+## Upload a staged recording
+
+After configuring `GNANI_API_KEY`, upload one supported recording:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/transcriptions \
+  -F "audio=@audio/test_recordings/recording.wav"
+```
+
+Supported upload extensions and media types are WAV, MP3, OGG, FLAC, AAC and M4A. The default local upload limit is 25 MiB. Gnani REST accepts up to 30 seconds per request; WAV duration is checked locally, while compressed-file duration is checked by the upstream service.
+
+Successful response example:
+
+```json
+{
+  "success": true,
+  "request_id": "request-id-from-gnani",
+  "transcript": "ನನಗೆ chest pain ಇದೆ",
+  "detected_language_code": "kn-IN",
+  "model": "prisma-v3.0",
+  "processing_time": 0.42,
+  "end_to_end_latency": 0.55
+}
+```
+
+Uploaded audio is written to a temporary file only while the request is processed and is deleted in a `finally` block. Credentials remain backend-only.
 
 ## Run a Prisma transcription
 
@@ -108,8 +143,25 @@ For compressed formats, exact duration inspection is not available without an ad
 - No live API transcription has been run because no `GNANI_API_KEY` is configured in this environment.
 - No staged recording is included in the repository; private recordings are intentionally ignored.
 - REST is limited to 30 seconds per request by the documented API.
+- Compressed-file duration cannot be inspected locally without an additional media decoder; the upstream API enforces its duration limit.
 - No audio denoising, AudioWorklet capture, WebSocket streaming, React interface, SQLite storage, emergency rules or Timbre integration exists yet.
+
+## Error handling
+
+The upload endpoint returns a stable envelope:
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "UNSUPPORTED_MEDIA_TYPE",
+    "message": "Content type 'text/plain' is not valid for .wav."
+  }
+}
+```
+
+It handles missing credentials, invalid or empty audio, unsupported media, oversized uploads, documented Gnani authentication/credit/scope/rate-limit/server errors, timeouts, network failures and malformed upstream responses without returning stack traces or secrets.
 
 ## Next milestone
 
-Run the authenticated Prisma REST smoke test with a real staged Kannada-English recording, then add a minimal FastAPI upload endpoint that delegates to the tested client without exposing credentials.
+Run the authenticated Prisma REST smoke test through both the CLI and `/api/v1/transcriptions` using a real staged Kannada-English recording. Then add the first minimal operator-facing frontend.

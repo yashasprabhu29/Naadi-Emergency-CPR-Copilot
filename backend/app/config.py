@@ -36,6 +36,11 @@ class Settings(BaseSettings):
     gnani_timeout_seconds: float = Field(
         default=60.0, gt=0, validation_alias="GNANI_TIMEOUT_SECONDS"
     )
+    max_upload_size_bytes: int = Field(
+        default=25 * 1024 * 1024,
+        gt=0,
+        validation_alias="MAX_UPLOAD_SIZE_BYTES",
+    )
 
     @property
     def gnani_api_url(self) -> str:
