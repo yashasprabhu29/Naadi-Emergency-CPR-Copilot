@@ -72,3 +72,15 @@ Successful response fields mirror metadata actually returned by Prisma:
 ```
 
 Fields absent from the upstream response are omitted from the JSON response. Error responses use a stable `success: false` envelope with an error code and safe message. Swagger documentation is available at `/docs` when FastAPI is running.
+
+## React operator dashboard
+
+The Vite dashboard lives under `frontend/` and uses `VITE_API_BASE_URL` to reach FastAPI. It sends the selected recording as a browser `FormData` field named `audio`; it deliberately does not set the multipart `Content-Type` header so the browser can add its boundary.
+
+FastAPI allows only the explicit local development origins in `CORS_ALLOWED_ORIGINS`, which defaults to:
+
+```text
+http://localhost:5173,http://127.0.0.1:5173
+```
+
+The dashboard displays real health and transcription responses. When credentials are unavailable it shows the backend error and does not substitute a fake transcript. Emergency detection is visibly marked as not connected until the deterministic rules engine is implemented.

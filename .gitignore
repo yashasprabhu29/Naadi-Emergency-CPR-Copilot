@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+!frontend/.env.example
 
 # Python
 __pycache__/
@@ -39,6 +40,11 @@ audio/prompts/*
 *.swp
 .DS_Store
 Thumbs.db
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/coverage/
 
 # Logs and local databases
 *.log

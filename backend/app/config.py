@@ -41,6 +41,10 @@ class Settings(BaseSettings):
         gt=0,
         validation_alias="MAX_UPLOAD_SIZE_BYTES",
     )
+    cors_allowed_origins: str = Field(
+        default="http://localhost:5173,http://127.0.0.1:5173",
+        validation_alias="CORS_ALLOWED_ORIGINS",
+    )
 
     @property
     def gnani_api_url(self) -> str:
@@ -53,6 +57,12 @@ class Settings(BaseSettings):
         """Whether a non-empty API key is configured."""
 
         return bool(self.gnani_api_key and self.gnani_api_key.strip())
+
+    @property
+    def cors_origins(self) -> list[str]:
+        """Return configured explicit origins for browser development."""
+
+        return [origin.strip() for origin in self.cors_allowed_origins.split(",") if origin.strip()]
 
 
 @lru_cache(maxsize=1)

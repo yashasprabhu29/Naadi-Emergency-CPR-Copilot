@@ -252,6 +252,25 @@ def test_health_endpoints_do_not_call_prisma(api_client: TestClient) -> None:
     assert api_health.json()["gnani_api_key_configured"] is False
 
 
+def test_local_frontend_cors_is_explicitly_allowed(api_client: TestClient) -> None:
+    allowed = api_client.options(
+        "/api/v1/transcriptions",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+    disallowed = api_client.get(
+        "/api/v1/health",
+        headers={"Origin": "https://untrusted.example"},
+    )
+
+    assert allowed.status_code == 200
+    assert allowed.headers["access-control-allow-origin"] == "http://localhost:5173"
+    assert "access-control-allow-origin" not in disallowed.headers
+
+
 def test_openapi_documents_upload_endpoint_and_constraints(api_client: TestClient) -> None:
     response = api_client.get("/openapi.json")
 

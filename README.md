@@ -4,9 +4,9 @@ Naadi is a decision-support prototype for emergency call-takers handling multili
 
 Naadi is not a medical device, an emergency service, or an integration with 108/112 infrastructure.
 
-## Milestone 02 status
+## Milestone 03 status
 
-This milestone adds a FastAPI staged-audio upload endpoint on top of the initial backend foundation and standalone Gnani Prisma REST transcription client. It does not include the React frontend, realtime audio streaming, SQLite persistence, emergency rules, or Timbre text-to-speech.
+This milestone adds a React/Vite operator dashboard connected to the FastAPI staged-audio upload endpoint. It does not include realtime audio streaming, SQLite persistence, emergency rules, or Timbre text-to-speech.
 
 The immediate live objective is to transcribe a staged Kannada-English recording with Gnani Prisma v3.0.
 
@@ -17,7 +17,7 @@ The immediate live objective is to transcribe a staged Kannada-English recording
 - A Gnani API key with STT access for live transcription.
 - A staged audio file no longer than 30 seconds in WAV, MP3, OGG, FLAC, AAC or M4A format.
 
-The current implementation does not require Node.js because React is planned for a later milestone.
+- Node.js 24+ and npm for the frontend.
 
 ## Environment setup
 
@@ -45,6 +45,10 @@ python -m pytest backend/tests -q
 ```
 
 All external API calls in the test suite are mocked; tests do not need credentials or consume Gnani credits.
+
+Frontend tests are run from `frontend` with `npm test`.
+
+Build the frontend for production with `npm run build` from `frontend`.
 
 ## Run FastAPI
 
@@ -96,6 +100,19 @@ Successful response example:
 
 Uploaded audio is written to a temporary file only while the request is processed and is deleted in a `finally` block. Credentials remain backend-only.
 
+## Run the operator dashboard
+
+Run FastAPI in one terminal and the dashboard in a second terminal:
+
+```bash
+cd frontend
+npm install
+cp .env.example .env
+npm run dev
+```
+
+Open <http://localhost:5173>. Set `VITE_API_BASE_URL` in `frontend/.env` when the backend is not running at `http://127.0.0.1:8000`. The dashboard reads the real `/api/v1/health` response and sends uploads to `/api/v1/transcriptions`; it does not contain or request a Gnani API key. FastAPI explicitly allows the local Vite origins configured by `CORS_ALLOWED_ORIGINS`.
+
 ## Run a Prisma transcription
 
 The CLI is located under `backend/scripts`:
@@ -144,7 +161,7 @@ For compressed formats, exact duration inspection is not available without an ad
 - No staged recording is included in the repository; private recordings are intentionally ignored.
 - REST is limited to 30 seconds per request by the documented API.
 - Compressed-file duration cannot be inspected locally without an additional media decoder; the upstream API enforces its duration limit.
-- No audio denoising, AudioWorklet capture, WebSocket streaming, React interface, SQLite storage, emergency rules or Timbre integration exists yet.
+- No audio denoising, AudioWorklet capture, WebSocket streaming, SQLite storage, emergency rules or Timbre integration exists yet.
 
 ## Error handling
 
@@ -164,4 +181,4 @@ It handles missing credentials, invalid or empty audio, unsupported media, overs
 
 ## Next milestone
 
-Run the authenticated Prisma REST smoke test through both the CLI and `/api/v1/transcriptions` using a real staged Kannada-English recording. Then add the first minimal operator-facing frontend.
+Run the authenticated Prisma REST smoke test through both the CLI and `/api/v1/transcriptions` using a real staged Kannada-English recording. Then add the deterministic emergency detection engine.
