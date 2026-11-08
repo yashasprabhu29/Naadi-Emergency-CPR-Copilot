@@ -210,8 +210,8 @@ def test_partial_phrase_no_false_positive(detector):
     assert len(result.matched_indicators) == 2
 
 
-def test_unknown_speaker_treated_as_caller(detector):
-    """Verify unknown speaker utterances are analyzed (treated as caller)."""
+def test_unknown_speaker_not_treated_as_caller(detector):
+    """Verify unknown speaker utterances are NOT analyzed (excluded from detection)."""
     utterances = [
         Utterance(
             text="Person collapsed",
@@ -227,9 +227,10 @@ def test_unknown_speaker_treated_as_caller(detector):
     
     result = detector.analyze(utterances)
     
-    # Unknown speakers should be analyzed (not excluded like operators)
-    assert result.status == DetectionStatus.POTENTIAL_EMERGENCY
-    assert len(result.matched_indicators) == 2
+    # Unknown speakers should NOT be analyzed - only explicit "caller" speaker
+    assert result.status == DetectionStatus.NO_INDICATOR
+    assert len(result.matched_indicators) == 0
+    assert "No explicitly identified caller utterances available" in result.uncertainty_notes
 
 
 def test_gasping_detected_as_abnormal_breathing(detector):

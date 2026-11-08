@@ -244,16 +244,19 @@ def test_corrected_statement_creates_uncertainty(detector):
     assert len(result.contradictory_evidence) > 0
 
 
-def test_unknown_speaker_treated_as_caller(detector):
-    """Test that utterances with unknown speaker are analyzed."""
+def test_unknown_speaker_not_treated_as_caller(detector):
+    """Test that utterances with unknown speaker are NOT analyzed as caller speech."""
     utterances = [
         Utterance(text="Person collapsed", speaker=None, utterance_index=0),
         Utterance(text="Not breathing", speaker=None, utterance_index=1),
     ]
     result = detector.analyze(utterances)
 
-    # Unknown speaker utterances should be analyzed
-    assert result.status == DetectionStatus.POTENTIAL_EMERGENCY
+    # Unknown speaker utterances should NOT be analyzed - only explicit "caller" speaker
+    assert result.status == DetectionStatus.NO_INDICATOR
+    assert len(result.matched_indicators) == 0
+    assert "No explicitly identified caller utterances available" in result.uncertainty_notes
+    assert "Unknown speaker utterances excluded from emergency detection" in result.uncertainty_notes
 
 
 def test_case_insensitive_matching(detector):
@@ -345,3 +348,92 @@ def test_fainted_detected_as_unresponsive(detector):
     unresponsive_matches = [m for m in result.matched_indicators if m.category == "unresponsive"]
     assert len(unresponsive_matches) == 1
     assert "fainted" in unresponsive_matches[0].phrase
+
+
+def test_mixed_caller_operator_unknown_speakers(detector):
+    """Test mixed speaker types - only caller utterances should be analyzed."""
+    utterances = [
+        Utterance(text="He is unconscious", speaker="caller", utterance_index=0),
+        Utterance(text="Patient collapsed", speaker=None, utterance_index=1),  # Unknown - excluded
+        Utterance(text="Check breathing", speaker="operator", utterance_index=2),  # Operator - excluded
+        Utterance(text="He is not breathing", speaker="caller", utterance_index=3),
+    ]
+    result = detector.analyze(utterances)
+
+    # Only 2 caller utterances (0, 3) should be analyzed
+    assert result.status == DetectionStatus.POTENTIAL_EMERGENCY
+    assert len(result.matched_indicators) == 2
+    
+    # Verify only caller utterances matched
+    for indicator in result.matched_indicators:
+        assert indicator.speaker == "caller"
+
+
+def test_unknown_speaker_with_valid_caller_utterances(detector):
+    """Test that unknown speaker utterances don't interfere with valid caller detection."""
+    utterances = [
+        Utterance(text="Emergency indicators here", speaker=None, utterance_index=0),
+        Utterance(text="He is unconscious", speaker="caller", utterance_index=1),
+        Utterance(text="More unknown speech", speaker=None, utterance_index=2),
+        Utterance(text="He is not breathing", speaker="caller", utterance_index=3),
+    ]
+    result = detector.analyze(utterances)
+
+    # Should detect emergency from the 2 caller utterances
+    assert result.status == DetectionStatus.POTENTIAL_EMERGENCY
+    assert len(result.matched_indicators) == 2
+    
+    # All matched indicators should be from caller utterances
+    caller_indices = {m.utterance_index for m in result.matched_indicators}
+    assert caller_indices == {1, 3}
+
+
+def test_only_unknown_speakers_with_emergency_phrases(detector):
+    """Test that emergency phrases in unknown speaker utterances do not trigger detection."""
+    utterances = [
+        Utterance(text="Person is unconscious", speaker=None, utterance_index=0),
+        Utterance(text="Not breathing at all", speaker=None, utterance_index=1),
+        Utterance(text="Someone help", speaker=None, utterance_index=2),
+    ]
+    result = detector.analyze(utterances)
+
+    # Should NOT detect emergency - no caller utterances
+    assert result.status == DetectionStatus.NO_INDICATOR
+    assert len(result.matched_indicators) == 0
+    assert "No explicitly identified caller utterances available" in result.uncertainty_notes
+
+
+def test_insufficient_caller_evidence_returns_appropriate_status(detector):
+    """Test that insufficient caller utterances returns correct status."""
+    utterances = [
+        Utterance(text="What's the emergency?", speaker="operator", utterance_index=0),
+        Utterance(text="Background noise", speaker=None, utterance_index=1),
+        Utterance(text="Please stay on the line", speaker="operator", utterance_index=2),
+    ]
+    result = detector.analyze(utterances)
+
+    # No caller utterances available
+    assert result.status == DetectionStatus.NO_INDICATOR
+    assert result.risk_category == RiskCategory.NONE
+    assert result.requires_operator_confirmation is False
+    assert len(result.matched_indicators) == 0
+
+
+def test_single_caller_utterance_with_both_indicators(detector):
+    """Test that both indicators in a single caller utterance are detected."""
+    utterances = [
+        Utterance(
+            text="My father collapsed and is not breathing",
+            speaker="caller",
+            utterance_index=0,
+        ),
+    ]
+    result = detector.analyze(utterances)
+
+    # Should detect both indicators from single utterance
+    assert result.status == DetectionStatus.POTENTIAL_EMERGENCY
+    assert len(result.matched_indicators) == 2
+    
+    categories = {m.category for m in result.matched_indicators}
+    assert "unresponsive" in categories
+    assert "abnormal_breathing" in categories

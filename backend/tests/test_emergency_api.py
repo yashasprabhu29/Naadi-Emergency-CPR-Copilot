@@ -161,7 +161,7 @@ def test_analyze_emergency_empty_text():
 
 
 def test_analyze_emergency_unknown_speaker():
-    """Test that unknown speaker is handled."""
+    """Test that unknown speaker utterances are NOT analyzed (excluded from detection)."""
     payload = {
         "utterances": [
             {"text": "He is unconscious", "speaker": None, "utterance_index": 0},
@@ -172,7 +172,10 @@ def test_analyze_emergency_unknown_speaker():
 
     assert response.status_code == 200
     data = response.json()
-    assert data["status"] == "potential_emergency"
+    # Unknown speakers should NOT trigger detection
+    assert data["status"] == "no_indicator"
+    assert len(data["matched_indicators"]) == 0
+    assert "No explicitly identified caller utterances available" in data["uncertainty_notes"]
 
 
 def test_analyze_emergency_response_schema():

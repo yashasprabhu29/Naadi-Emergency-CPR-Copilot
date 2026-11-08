@@ -249,19 +249,34 @@ class EmergencyDetector:
             )
 
         # Extract latest three caller utterances (RULE_001 window)
-        caller_utterances = [u for u in utterances if u.speaker != "operator"]
+        # Only explicitly identified caller utterances are analyzed
+        # Operator and unknown speakers are excluded
+        caller_utterances = [u for u in utterances if u.speaker == "caller"]
         latest_three = caller_utterances[-3:] if len(caller_utterances) >= 3 else caller_utterances
 
         if not latest_three:
+            # Determine reason for no caller utterances
+            has_operator = any(u.speaker == "operator" for u in utterances)
+            has_unknown = any(u.speaker is None or u.speaker not in ["caller", "operator"] for u in utterances)
+            
+            uncertainty_notes = []
+            if has_operator and not has_unknown:
+                uncertainty_notes.append("Only operator speech detected")
+            elif has_unknown:
+                uncertainty_notes.append("No explicitly identified caller utterances available")
+                uncertainty_notes.append("Unknown speaker utterances excluded from emergency detection")
+            else:
+                uncertainty_notes.append("Empty or invalid transcript")
+            
             return DetectionResult(
                 status=DetectionStatus.NO_INDICATOR,
                 risk_category=RiskCategory.NONE,
-                explanation="No caller utterances found in the transcript.",
+                explanation="No caller utterances found in the transcript. Emergency detection requires explicitly identified caller speech.",
                 matched_indicators=[],
                 contradictory_evidence=[],
                 rule_identifiers=[],
                 requires_operator_confirmation=False,
-                uncertainty_notes=["Only operator speech detected"],
+                uncertainty_notes=uncertainty_notes,
             )
 
         # Detect matches
