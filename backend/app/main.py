@@ -13,7 +13,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from backend.app.config import get_settings
-from backend.app.schemas import ErrorResponse, HealthResponse, TranscriptionResponse
+from backend.app.schemas import (
+    EmergencyAnalysisRequest,
+    EmergencyAnalysisResponse,
+    ErrorResponse,
+    HealthResponse,
+    MatchedIndicatorResponse,
+    TranscriptionResponse,
+)
+from backend.app.services.emergency_detector import EmergencyDetector, Utterance
 from backend.app.services.prisma_client import (
     AudioValidationError,
     PrismaAPIError,
@@ -288,3 +296,91 @@ async def create_transcription(
                 os.unlink(temporary_path)
             except FileNotFoundError:
                 pass
+
+
+@app.post(
+    "/api/v1/emergency/analyze",
+    response_model=EmergencyAnalysisResponse,
+    status_code=status.HTTP_200_OK,
+    tags=["emergency"],
+    summary="Analyze transcript for emergency indicators",
+    description=(
+        "Applies deterministic rule-based detection to identify potential "
+        "cardiac-respiratory emergency indicators. Requires both unresponsive "
+        "and abnormal breathing indicators within the latest three caller "
+        "utterances. All results require operator confirmation. This endpoint "
+        "does not use LLMs or probabilistic models."
+    ),
+    responses={
+        200: {
+            "description": "Emergency analysis completed",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "status": "potential_emergency",
+                        "risk_category": "cardiac_respiratory",
+                        "explanation": "Potential cardiac-respiratory emergency detected...",
+                        "matched_indicators": [
+                            {
+                                "phrase": "unconscious",
+                                "category": "unresponsive",
+                                "utterance_index": 0,
+                                "utterance_text": "He is unconscious",
+                                "speaker": "caller",
+                            }
+                        ],
+                        "contradictory_evidence": [],
+                        "rule_identifiers": ["RULE_001"],
+                        "requires_operator_confirmation": True,
+                        "uncertainty_notes": [],
+                        "detector_version": "1.0.0",
+                    }
+                }
+            },
+        },
+        400: {"model": ErrorResponse, "description": "Invalid request"},
+    },
+)
+def analyze_emergency(request: EmergencyAnalysisRequest) -> EmergencyAnalysisResponse:
+    """Analyze transcript utterances for emergency indicators.
+
+    This endpoint applies explainable deterministic rules to detect potential
+    emergencies. It does not make medical diagnoses or authorize dispatch.
+    All emergency indicators require human operator review and confirmation.
+    """
+    detector = EmergencyDetector()
+
+    # Convert request utterances to detector format
+    utterances = [
+        Utterance(
+            text=u.text,
+            speaker=u.speaker,
+            utterance_index=u.utterance_index,
+        )
+        for u in request.utterances
+    ]
+
+    # Run detection
+    result = detector.analyze(utterances)
+
+    # Convert to response format
+    return EmergencyAnalysisResponse(
+        status=result.status.value,
+        risk_category=result.risk_category.value,
+        explanation=result.explanation,
+        matched_indicators=[
+            MatchedIndicatorResponse(
+                phrase=m.phrase,
+                category=m.category,
+                utterance_index=m.utterance_index,
+                utterance_text=m.utterance_text,
+                speaker=m.speaker,
+            )
+            for m in result.matched_indicators
+        ],
+        contradictory_evidence=result.contradictory_evidence,
+        rule_identifiers=result.rule_identifiers,
+        requires_operator_confirmation=result.requires_operator_confirmation,
+        uncertainty_notes=result.uncertainty_notes,
+        detector_version=result.detector_version,
+    )

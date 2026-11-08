@@ -36,7 +36,7 @@ describe("Naadi operator dashboard", () => {
     render(<App />);
 
     expect(screen.getByRole("heading", { name: /understand the call/i })).toBeInTheDocument();
-    expect(screen.getByText("Emergency detection engine not yet connected.")).toBeInTheDocument();
+    expect(screen.getByText("Emergency detection engine ready.")).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText("Configured")).toBeInTheDocument());
     expect(screen.getByText("Backend online")).toBeInTheDocument();
   });

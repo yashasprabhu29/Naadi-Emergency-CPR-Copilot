@@ -128,3 +128,30 @@ export async function transcribeAudio(file, { signal } = {}) {
 
   return body;
 }
+
+export async function analyzeEmergency(utterances, { signal } = {}) {
+  if (!Array.isArray(utterances) || utterances.length === 0) {
+    throw new ApiError("At least one utterance is required for emergency analysis.", {
+      code: "INVALID_INPUT",
+    });
+  }
+
+  const body = await requestJson("/api/v1/emergency/analyze", {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ utterances }),
+    signal,
+  });
+
+  if (!body || typeof body.status !== "string") {
+    throw new ApiError("The backend returned an incomplete emergency analysis response.", {
+      code: "MALFORMED_RESPONSE",
+      body,
+    });
+  }
+
+  return body;
+}

@@ -4,11 +4,30 @@ Naadi is a decision-support prototype for emergency call-takers handling multili
 
 Naadi is not a medical device, an emergency service, or an integration with 108/112 infrastructure.
 
-## Milestone 03 status
+## Milestone 04 status
 
-This milestone adds a React/Vite operator dashboard connected to the FastAPI staged-audio upload endpoint. It does not include realtime audio streaming, SQLite persistence, emergency rules, or Timbre text-to-speech.
+This milestone adds a deterministic emergency indicator detection engine. The system uses explainable rule-based logic to identify potential cardiac-respiratory emergencies from multilingual transcripts. All emergency indicators require human operator review and confirmation.
 
-The immediate live objective is to transcribe a staged Kannada-English recording with Gnani Prisma v3.0.
+Completed milestones:
+- **Milestone 01**: Gnani Prisma REST client with comprehensive error handling
+- **Milestone 02**: FastAPI transcription endpoint with audio validation
+- **Milestone 03**: React/Vite operator dashboard with real backend integration
+- **Milestone 04**: Deterministic emergency detection engine (current)
+
+Not yet implemented: realtime audio streaming, SQLite persistence, or Timbre text-to-speech.
+
+## Milestone 04 status
+
+This milestone adds a deterministic, explainable emergency indicator detection engine. The engine applies rule-based pattern matching to identify potential cardiac-respiratory emergencies requiring immediate CPR protocol review.
+
+**Detection Rule (RULE_001):**
+A potential emergency indicator is raised when BOTH conditions are met within the latest three caller utterances:
+1. At least one unresponsive indicator (unconscious, collapsed, not responding, etc.)
+2. At least one abnormal breathing indicator (not breathing, gasping, breathing stopped, etc.)
+
+**Supported languages:** Kannada, Hindi, English, and codemix variants.
+
+**Important:** All detection results require human operator confirmation. The system does not use LLMs or probabilistic models. Contradictory evidence (negations, past tense, corrections) triggers review-required status instead of potential emergency.
 
 ## Prerequisites
 
@@ -155,13 +174,84 @@ For compressed formats, exact duration inspection is not available without an ad
 - [STT limits](https://docs.gnani.ai/api/STT/limits.md)
 - [Error reference](https://docs.gnani.ai/api/introduction/errors.md)
 
+## Emergency detection
+
+The emergency detection engine uses deterministic, explainable Python rules to identify potential cardiac-respiratory emergencies. It does not use LLMs or probabilistic models in the emergency decision path.
+
+### Detection logic
+
+**Core Rule (RULE_001):** A potential emergency indicator is raised when BOTH conditions are met within the latest three caller utterances:
+
+1. At least one unresponsive indicator (unconscious, not responding, collapsed, fainted)
+2. At least one abnormal breathing indicator (not breathing, no normal breathing, gasping)
+
+### Supported phrases
+
+The detector recognizes emergency phrases in Kannada, Hindi, and English:
+
+**Unresponsive indicators:**
+- Kannada: ಎಚ್ಚರ ಇಲ್ಲ, ಎಚ್ಚರ ತಪ್ಪಿ, ಮಾತಾಡ್ತಿಲ್ಲ, ಸ್ಪಂದಿಸ್ತಿಲ್ಲ, ಬಿದ್ದುಬಿಟ್ರು
+- Hindi: बेहोश, होश नहीं, जवाब नहीं, गिर गए
+- English: unconscious, not responding, collapsed, fainted, unresponsive
+
+**Abnormal breathing indicators:**
+- Kannada: ಉಸಿರಾಡ್ತಿಲ್ಲ, ಉಸಿರು ಇಲ್ಲ, ಉಸಿರು ನಿಂತಿದೆ
+- Hindi: साँस नहीं, सांस रुक गई
+- English: not breathing, no normal breathing, gasping, stopped breathing
+
+Matching is case-insensitive and works across mixed-language utterances.
+
+### Contradiction handling
+
+The detector identifies contradictory evidence including:
+- Negation phrases: "is breathing", "breathing normally", "is awake", "responding now"
+- Past tense indicators: "was unconscious", "earlier", "before"
+- Caller corrections: "Wait, he is breathing now"
+
+When contradictions are detected, the status changes from `potential_emergency` to `review_required`.
+
+### Detection statuses
+
+- **no_indicator**: No emergency phrases detected
+- **review_required**: Single indicator or contradictory evidence present
+- **potential_emergency**: Both indicators present without contradictions
+
+All non-zero detections require explicit operator confirmation.
+
+### API endpoint
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/v1/emergency/analyze \
+  -H "Content-Type: application/json" \
+  -d '{
+    "utterances": [
+      {"text": "He is unconscious", "speaker": "caller", "utterance_index": 0},
+      {"text": "He is not breathing", "speaker": "caller", "utterance_index": 1}
+    ]
+  }'
+```
+
+Response includes matched indicators, explanations, rule identifiers, contradictory evidence, and uncertainty notes.
+
+### Medical disclaimer
+
+This system provides decision support only. It does not:
+- Diagnose medical conditions
+- Authorize ambulance dispatch
+- Replace trained emergency operators
+- Guarantee detection accuracy
+- Connect to 108/112 emergency infrastructure
+
+All emergency indicators require human review and confirmation.
+
 ## Current limitations
 
 - No live API transcription has been run because no `GNANI_API_KEY` is configured in this environment.
 - No staged recording is included in the repository; private recordings are intentionally ignored.
 - REST is limited to 30 seconds per request by the documented API.
 - Compressed-file duration cannot be inspected locally without an additional media decoder; the upstream API enforces its duration limit.
-- No audio denoising, AudioWorklet capture, WebSocket streaming, SQLite storage, emergency rules or Timbre integration exists yet.
+- Emergency detection analyzes the full transcript as a single utterance; structured multi-utterance input would improve accuracy.
+- No audio denoising, AudioWorklet capture, WebSocket streaming, or SQLite storage exists yet.
 
 ## Error handling
 
@@ -179,6 +269,46 @@ The upload endpoint returns a stable envelope:
 
 It handles missing credentials, invalid or empty audio, unsupported media, oversized uploads, documented Gnani authentication/credit/scope/rate-limit/server errors, timeouts, network failures and malformed upstream responses without returning stack traces or secrets.
 
+## Testing
+
+### Backend tests
+
+```bash
+source .venv/bin/activate
+python -m pytest backend/tests -v
+```
+
+Test coverage:
+- 13 Prisma client tests (validation, HTTP errors, timeouts)
+- 20 transcription API tests (uploads, CORS, error handling)
+- 24 emergency detector tests (phrase detection, contradictions, languages)
+- 16 emergency API tests (endpoint behavior, validation, schemas)
+
+**Total: 73 backend tests**
+
+All external API calls are mocked; tests do not consume Gnani credits.
+
+### Frontend tests
+
+```bash
+cd frontend
+npm test
+```
+
+**Total: 11 frontend tests** covering API integration, uploads, validation, and error handling.
+
+### Production build
+
+```bash
+cd frontend
+npm run build
+```
+
 ## Next milestone
 
-Run the authenticated Prisma REST smoke test through both the CLI and `/api/v1/transcriptions` using a real staged Kannada-English recording. Then add the deterministic emergency detection engine.
+Priority tasks:
+1. Run authenticated live Prisma test with real Kannada-English recording
+2. Improve emergency detection with structured multi-utterance transcripts
+3. Add SQLite persistence for call records and detection history
+4. Implement operator acknowledgment logging
+5. Add Timbre text-to-speech for protocol prompts

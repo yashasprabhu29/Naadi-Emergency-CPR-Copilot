@@ -2,12 +2,12 @@ import { useCallback, useState } from "react";
 
 import { AudioUploadPanel } from "./components/AudioUploadPanel.jsx";
 import { CallInfoPanel } from "./components/CallInfoPanel.jsx";
-import { EmergencyPlaceholder } from "./components/EmergencyPlaceholder.jsx";
+import { EmergencyPanel } from "./components/EmergencyPanel.jsx";
 import { SystemStatus } from "./components/SystemStatus.jsx";
 import { TopBar } from "./components/TopBar.jsx";
 import { TranscriptPanel } from "./components/TranscriptPanel.jsx";
 import { useSystemHealth } from "./hooks/useSystemHealth.js";
-import { transcribeAudio } from "./services/api.js";
+import { transcribeAudio, analyzeEmergency } from "./services/api.js";
 
 function currentCallState(status) {
   if (status === "uploading") return "TRANSCRIBING";
@@ -24,6 +24,9 @@ export default function App() {
   const [transcriptionError, setTranscriptionError] = useState("");
   const [result, setResult] = useState(null);
   const [notes, setNotes] = useState("");
+  const [emergencyAnalysis, setEmergencyAnalysis] = useState(null);
+  const [emergencyAnalyzing, setEmergencyAnalyzing] = useState(false);
+  const [emergencyError, setEmergencyError] = useState("");
 
   const handleFileSelected = useCallback((file, validationError) => {
     setSelectedFile(file);
@@ -32,6 +35,7 @@ export default function App() {
     if (validationError) {
       setTranscriptionStatus("idle");
       setResult(null);
+      setEmergencyAnalysis(null);
     }
   }, []);
 
@@ -41,15 +45,47 @@ export default function App() {
     setTranscriptionStatus("uploading");
     setTranscriptionError("");
     setResult(null);
+    setEmergencyAnalysis(null);
+    setEmergencyError("");
+
     try {
       const transcription = await transcribeAudio(selectedFile);
       setResult(transcription);
       setTranscriptionStatus("success");
+
+      // Automatically analyze transcript for emergency indicators
+      // Note: Current transcription endpoint returns single transcript text
+      // For real analysis, we would need structured utterances
+      // For demo, we'll treat the transcript as a single caller utterance
+      if (transcription.transcript) {
+        setEmergencyAnalyzing(true);
+        try {
+          const utterances = [
+            {
+              text: transcription.transcript,
+              speaker: "caller",
+              utterance_index: 0,
+            },
+          ];
+          const analysis = await analyzeEmergency(utterances);
+          setEmergencyAnalysis(analysis);
+        } catch (error) {
+          setEmergencyError(error.message || "Emergency analysis failed.");
+        } finally {
+          setEmergencyAnalyzing(false);
+        }
+      }
     } catch (error) {
       setTranscriptionError(error.message || "The transcription request failed.");
       setTranscriptionStatus("error");
     }
   }, [fileError, selectedFile, transcriptionStatus]);
+
+  const handleEmergencyConfirm = useCallback(() => {
+    // In a real system, this would log the operator acknowledgment
+    // and potentially trigger next steps in the protocol
+    console.log("Operator acknowledged emergency detection at:", new Date().toISOString());
+  }, []);
 
   const transcriptPanelError = transcriptionError || fileError;
 
@@ -92,7 +128,12 @@ export default function App() {
         </div>
 
         <div className="dashboard-grid dashboard-grid--secondary">
-          <EmergencyPlaceholder />
+          <EmergencyPanel
+            analysis={emergencyAnalysis}
+            onConfirm={handleEmergencyConfirm}
+            isAnalyzing={emergencyAnalyzing}
+            error={emergencyError}
+          />
           <CallInfoPanel notes={notes} onNotesChange={setNotes} />
           <SystemStatus
             healthStatus={healthStatus}
