@@ -12,9 +12,11 @@ medical conditions or authorize ambulance dispatch.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+import unicodedata
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
+from uuid import uuid4
 
 
 class DetectionStatus(str, Enum):
@@ -102,22 +104,58 @@ PAST_TENSE_INDICATORS = {
 
 @dataclass(frozen=True)
 class Utterance:
-    """A single utterance from the call transcript."""
+    """A single utterance from the call transcript with full context.
+    
+    Supports both manually segmented and automatically diarized transcripts.
+    Optional fields allow gradual enhancement as audio processing improves.
+    """
 
     text: str
-    speaker: str | None = None  # "caller", "operator", or None if unknown
-    utterance_index: int = 0  # Position in the conversation
+    """Original transcript text, preserved without modification."""
+    
+    speaker: str | None = None
+    """Speaker identity: 'caller', 'operator', or None if unknown."""
+    
+    utterance_index: int = 0
+    """Sequential position in the conversation (0-indexed)."""
+    
+    utterance_id: str = field(default_factory=lambda: str(uuid4()))
+    """Unique identifier for this utterance."""
+    
+    timestamp: float | None = None
+    """Optional timestamp in seconds from call start."""
+    
+    language: str | None = None
+    """Detected or declared language code (e.g., 'kn', 'en', 'hi', 'mixed')."""
+    
+    confidence: float | None = None
+    """Optional transcription confidence (0.0-1.0) if available from ASR."""
+    
+    source: str = "manual"
+    """Source of utterance: 'manual', 'diarization', 'sentence_boundary'."""
 
 
 @dataclass(frozen=True)
 class MatchedIndicator:
-    """A detected emergency phrase match."""
+    """A detected emergency phrase match with full traceability."""
 
     phrase: str
-    category: str  # "unresponsive" or "abnormal_breathing"
+    """The exact phrase that was matched from the dictionary."""
+    
+    category: str
+    """Indicator category: 'unresponsive' or 'abnormal_breathing'."""
+    
     utterance_index: int
+    """Sequential position of the source utterance."""
+    
+    utterance_id: str
+    """Unique identifier of the source utterance."""
+    
     utterance_text: str
+    """Complete original text of the utterance containing the match."""
+    
     speaker: str | None
+    """Speaker who produced this utterance."""
 
 
 @dataclass(frozen=True)
@@ -132,7 +170,7 @@ class DetectionResult:
     rule_identifiers: list[str]
     requires_operator_confirmation: bool
     uncertainty_notes: list[str]
-    detector_version: str = "1.0.0"
+    detector_version: str = "1.1.0"
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to JSON-serializable dictionary."""
@@ -145,6 +183,7 @@ class DetectionResult:
                     "phrase": m.phrase,
                     "category": m.category,
                     "utterance_index": m.utterance_index,
+                    "utterance_id": m.utterance_id,
                     "utterance_text": m.utterance_text,
                     "speaker": m.speaker,
                 }
@@ -297,17 +336,26 @@ class EmergencyDetector:
     def _find_matches(
         self, utterances: list[Utterance], phrases: set[str], category: str
     ) -> list[MatchedIndicator]:
-        """Find phrase matches in utterances."""
+        """Find phrase matches in utterances with duplicate prevention."""
         matches = []
+        seen_combinations = set()  # Prevent duplicate matches: (utterance_id, phrase)
+        
         for utterance in utterances:
             text_lower = utterance.text.lower()
             for phrase in phrases:
                 if phrase.lower() in text_lower:
+                    # Prevent duplicate detection of same phrase in same utterance
+                    combo_key = (utterance.utterance_id, phrase)
+                    if combo_key in seen_combinations:
+                        continue
+                    seen_combinations.add(combo_key)
+                    
                     matches.append(
                         MatchedIndicator(
                             phrase=phrase,
                             category=category,
                             utterance_index=utterance.utterance_index,
+                            utterance_id=utterance.utterance_id,
                             utterance_text=utterance.text,
                             speaker=utterance.speaker,
                         )
@@ -325,7 +373,8 @@ class EmergencyDetector:
             for negation in self.negation_indicators:
                 if negation.lower() in text_lower:
                     contradictions.append(
-                        f"Negation detected: '{utterance.text}' (utterance {utterance.utterance_index})"
+                        f"Negation detected: '{utterance.text}' "
+                        f"(utterance {utterance.utterance_index}, ID: {utterance.utterance_id[:8]})"
                     )
                     break
 
@@ -333,7 +382,8 @@ class EmergencyDetector:
             for past in self.past_tense_indicators:
                 if past.lower() in text_lower:
                     contradictions.append(
-                        f"Past tense detected: '{utterance.text}' (utterance {utterance.utterance_index})"
+                        f"Past tense detected: '{utterance.text}' "
+                        f"(utterance {utterance.utterance_index}, ID: {utterance.utterance_id[:8]})"
                     )
                     break
 

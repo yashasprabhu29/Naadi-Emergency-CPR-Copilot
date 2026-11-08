@@ -40,7 +40,7 @@ class HealthResponse(BaseModel):
 
 
 class UtteranceInput(BaseModel):
-    """Single utterance for emergency analysis."""
+    """Single utterance for emergency analysis with full context."""
 
     text: str = Field(..., min_length=1, description="Utterance text")
     speaker: str | None = Field(
@@ -48,6 +48,29 @@ class UtteranceInput(BaseModel):
         description="Speaker role: 'caller', 'operator', or None if unknown",
     )
     utterance_index: int = Field(default=0, ge=0, description="Position in conversation")
+    utterance_id: str | None = Field(
+        default=None,
+        description="Unique identifier (auto-generated if not provided)",
+    )
+    timestamp: float | None = Field(
+        default=None,
+        ge=0,
+        description="Optional timestamp in seconds from call start",
+    )
+    language: str | None = Field(
+        default=None,
+        description="Detected language code (e.g., 'kn', 'en', 'hi', 'mixed')",
+    )
+    confidence: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Optional transcription confidence score",
+    )
+    source: str = Field(
+        default="manual",
+        description="Source: 'manual', 'diarization', 'sentence_boundary'",
+    )
 
 
 class EmergencyAnalysisRequest(BaseModel):
@@ -59,11 +82,12 @@ class EmergencyAnalysisRequest(BaseModel):
 
 
 class MatchedIndicatorResponse(BaseModel):
-    """Detected emergency phrase in the transcript."""
+    """Detected emergency phrase in the transcript with full traceability."""
 
     phrase: str
     category: str
     utterance_index: int
+    utterance_id: str
     utterance_text: str
     speaker: str | None
 
