@@ -8,6 +8,7 @@ import { TopBar } from "./components/TopBar.jsx";
 import { TranscriptPanel } from "./components/TranscriptPanel.jsx";
 import { useSystemHealth } from "./hooks/useSystemHealth.js";
 import { transcribeAudio, analyzeEmergency } from "./services/api.js";
+import { parseTranscriptToUtterances } from "./utils/utteranceParser.js";
 
 function currentCallState(status) {
   if (status === "uploading") return "TRANSCRIBING";
@@ -54,19 +55,19 @@ export default function App() {
       setTranscriptionStatus("success");
 
       // Automatically analyze transcript for emergency indicators
-      // Note: Current transcription endpoint returns single transcript text
-      // For real analysis, we would need structured utterances
-      // For demo, we'll treat the transcript as a single caller utterance
+      // Parse transcript into structured utterances with unique IDs
       if (transcription.transcript) {
         setEmergencyAnalyzing(true);
         try {
-          const utterances = [
+          const utterances = parseTranscriptToUtterances(
+            transcription.transcript,
+            "caller",
             {
-              text: transcription.transcript,
-              speaker: "caller",
-              utterance_index: 0,
-            },
-          ];
+              language: transcription.detected_language || null,
+              confidence: transcription.confidence || null,
+              source: "sentence_boundary",
+            }
+          );
           const analysis = await analyzeEmergency(utterances);
           setEmergencyAnalysis(analysis);
         } catch (error) {
