@@ -102,6 +102,20 @@ PAST_TENSE_INDICATORS = {
 }
 
 
+def normalize_text(text: str) -> str:
+    """Normalize text for consistent matching across languages.
+    
+    Applies Unicode NFC normalization to handle different representations
+    of the same character, particularly important for Kannada and Hindi.
+    Normalizes whitespace to single spaces. Preserves case for language-specific handling.
+    """
+    # Unicode normalization - NFC for canonical composition
+    normalized = unicodedata.normalize("NFC", text)
+    # Normalize whitespace
+    normalized = " ".join(normalized.split())
+    return normalized
+
+
 @dataclass(frozen=True)
 class Utterance:
     """A single utterance from the call transcript with full context.
@@ -336,14 +350,21 @@ class EmergencyDetector:
     def _find_matches(
         self, utterances: list[Utterance], phrases: set[str], category: str
     ) -> list[MatchedIndicator]:
-        """Find phrase matches in utterances with duplicate prevention."""
+        """Find phrase matches in utterances with Unicode normalization and duplicate prevention."""
         matches = []
         seen_combinations = set()  # Prevent duplicate matches: (utterance_id, phrase)
         
         for utterance in utterances:
-            text_lower = utterance.text.lower()
+            # Normalize text for consistent matching
+            normalized_text = normalize_text(utterance.text)
+            text_lower = normalized_text.lower()
+            
             for phrase in phrases:
-                if phrase.lower() in text_lower:
+                # Normalize phrase as well
+                normalized_phrase = normalize_text(phrase)
+                phrase_lower = normalized_phrase.lower()
+                
+                if phrase_lower in text_lower:
                     # Prevent duplicate detection of same phrase in same utterance
                     combo_key = (utterance.utterance_id, phrase)
                     if combo_key in seen_combinations:
@@ -363,15 +384,17 @@ class EmergencyDetector:
         return matches
 
     def _find_contradictions(self, utterances: list[Utterance]) -> list[str]:
-        """Detect contradictory or negating statements."""
+        """Detect contradictory or negating statements with Unicode normalization."""
         contradictions = []
 
         for utterance in utterances:
-            text_lower = utterance.text.lower()
+            normalized_text = normalize_text(utterance.text)
+            text_lower = normalized_text.lower()
 
             # Check for negation indicators
             for negation in self.negation_indicators:
-                if negation.lower() in text_lower:
+                normalized_negation = normalize_text(negation)
+                if normalized_negation.lower() in text_lower:
                     contradictions.append(
                         f"Negation detected: '{utterance.text}' "
                         f"(utterance {utterance.utterance_index}, ID: {utterance.utterance_id[:8]})"
@@ -380,7 +403,8 @@ class EmergencyDetector:
 
             # Check for past tense indicators
             for past in self.past_tense_indicators:
-                if past.lower() in text_lower:
+                normalized_past = normalize_text(past)
+                if normalized_past.lower() in text_lower:
                     contradictions.append(
                         f"Past tense detected: '{utterance.text}' "
                         f"(utterance {utterance.utterance_index}, ID: {utterance.utterance_id[:8]})"
