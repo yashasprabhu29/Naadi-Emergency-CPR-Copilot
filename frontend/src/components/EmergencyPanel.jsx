@@ -110,6 +110,11 @@ export function EmergencyPanel({ analysis, onConfirm, isAnalyzing, error }) {
                   </span>
                   <span className="indicator-phrase">"{indicator.phrase}"</span>
                   <span className="indicator-context">in: {indicator.utterance_text}</span>
+                  {indicator.utterance_id && (
+                    <span className="indicator-id" title={indicator.utterance_id}>
+                      ID: {indicator.utterance_id.substring(0, 8)}...
+                    </span>
+                  )}
                 </li>
               ))}
             </ul>

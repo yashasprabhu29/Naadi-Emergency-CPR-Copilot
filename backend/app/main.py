@@ -356,6 +356,11 @@ def analyze_emergency(request: EmergencyAnalysisRequest) -> EmergencyAnalysisRes
             text=u.text,
             speaker=u.speaker,
             utterance_index=u.utterance_index,
+            utterance_id=u.utterance_id or str(__import__('uuid').uuid4()),
+            timestamp=u.timestamp,
+            language=u.language,
+            confidence=u.confidence,
+            source=u.source,
         )
         for u in request.utterances
     ]
@@ -373,6 +378,7 @@ def analyze_emergency(request: EmergencyAnalysisRequest) -> EmergencyAnalysisRes
                 phrase=m.phrase,
                 category=m.category,
                 utterance_index=m.utterance_index,
+                utterance_id=m.utterance_id,
                 utterance_text=m.utterance_text,
                 speaker=m.speaker,
             )

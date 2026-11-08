@@ -24,7 +24,7 @@ def test_analyze_emergency_potential_emergency():
     assert data["requires_operator_confirmation"] is True
     assert len(data["matched_indicators"]) == 2
     assert "RULE_001" in data["rule_identifiers"]
-    assert data["detector_version"] == "1.0.0"
+    assert data["detector_version"] == "1.1.0"
 
 
 def test_analyze_emergency_review_required():
