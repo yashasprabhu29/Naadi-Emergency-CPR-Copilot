@@ -390,3 +390,109 @@ def analyze_emergency(request: EmergencyAnalysisRequest) -> EmergencyAnalysisRes
         uncertainty_notes=result.uncertainty_notes,
         detector_version=result.detector_version,
     )
+
+
+# TTS endpoint
+from backend.app.services.timbre_client import (
+    TimbreClient,
+    TimbreAPIError,
+    TimbreConfigurationError,
+    TimbreNetworkError,
+    TimbreValidationError,
+)
+from backend.app.schemas import TTSRequest, TTSPromptsResponse
+from fastapi.responses import Response
+
+
+@app.post(
+    "/api/v1/tts/synthesize-prompt",
+    responses={
+        200: {"content": {"audio/wav": {}}, "description": "WAV audio file"},
+        400: {"model": ErrorResponse},
+        503: {"model": ErrorResponse},
+    },
+    tags=["tts"],
+)
+async def synthesize_emergency_prompt(request: TTSRequest) -> Response:
+    """Synthesize a predefined emergency coaching prompt.
+    
+    Only predefined, reviewed emergency prompts are allowed. This prevents
+    unrestricted medical instruction generation. Prompts are returned as
+    WAV audio for operator-triggered playback.
+    
+    Returns:
+        Binary WAV audio file
+    """
+    
+    try:
+        client = TimbreClient()
+        result = await run_in_threadpool(
+            client.synthesize_prompt,
+            prompt_id=request.prompt_id,
+            voice=request.voice,
+            speed=request.speed,
+        )
+        
+        return Response(
+            content=result.audio_bytes,
+            media_type=result.content_type,
+            headers={
+                "X-Audio-Duration-Estimate": f"{result.audio_duration_estimate:.2f}"
+                if result.audio_duration_estimate
+                else "unknown",
+            },
+        )
+    
+    except TimbreConfigurationError as exc:
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content=ErrorResponse(
+                code="TTS_NOT_CONFIGURED",
+                message=str(exc),
+            ).model_dump(),
+        )
+    except TimbreValidationError as exc:
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content=ErrorResponse(
+                code="INVALID_REQUEST",
+                message=str(exc),
+            ).model_dump(),
+        )
+    except TimbreAPIError as exc:
+        return JSONResponse(
+            status_code=exc.status_code if exc.status_code >= 500 else 400,
+            content=ErrorResponse(
+                code=exc.error_code,
+                message=exc.message,
+            ).model_dump(),
+        )
+    except TimbreNetworkError as exc:
+        return JSONResponse(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            content=ErrorResponse(
+                code="TTS_NETWORK_ERROR",
+                message=str(exc),
+            ).model_dump(),
+        )
+
+
+@app.get(
+    "/api/v1/tts/prompts",
+    response_model=TTSPromptsResponse,
+    tags=["tts"],
+)
+async def list_emergency_prompts() -> TTSPromptsResponse:
+    """List all available predefined emergency coaching prompts.
+    
+    Returns metadata for each prompt including language and description.
+    Use these prompt_ids with the synthesize-prompt endpoint.
+    """
+    
+    client = TimbreClient()
+    prompts = client.list_emergency_prompts()
+    
+    return TTSPromptsResponse(
+        prompts=prompts,
+        model="timbre-v3.0",
+    )

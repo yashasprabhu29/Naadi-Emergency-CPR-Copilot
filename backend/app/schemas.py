@@ -104,3 +104,40 @@ class EmergencyAnalysisResponse(BaseModel):
     requires_operator_confirmation: bool
     uncertainty_notes: list[str]
     detector_version: str
+
+
+
+# TTS Schemas
+class TTSRequest(BaseModel):
+    """Request to synthesize a predefined emergency prompt."""
+
+    prompt_id: str = Field(
+        ...,
+        description="ID of predefined emergency prompt",
+        examples=["start_cpr_kannada", "check_breathing_hindi"],
+    )
+    voice: str | None = Field(
+        default=None,
+        description="Optional voice override (defaults to language-appropriate voice)",
+        examples=["Chetana", "Kalpana", "Shivani"],
+    )
+    speed: float = Field(
+        default=1.0,
+        ge=0.85,
+        le=1.15,
+        description="Playback speed multiplier (0.85-1.15)",
+    )
+
+
+class TTSPromptsResponse(BaseModel):
+    """Response listing available emergency prompts."""
+
+    prompts: dict[str, dict[str, str]] = Field(
+        ...,
+        description="Dictionary mapping prompt_id to {language, description}",
+    )
+    model: str = Field(
+        ...,
+        description="TTS model used (timbre-v3.0)",
+        examples=["timbre-v3.0"],
+    )
