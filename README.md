@@ -4,19 +4,20 @@ Naadi is a decision-support prototype for emergency call-takers handling multili
 
 Naadi is not a medical device, an emergency service, or an integration with 108/112 infrastructure.
 
-## Milestone 04 status
-
-This milestone adds a deterministic emergency indicator detection engine. The system uses explainable rule-based logic to identify potential cardiac-respiratory emergencies from multilingual transcripts. All emergency indicators require human operator review and confirmation.
+## Current Status
 
 Completed milestones:
 - **Milestone 01**: Gnani Prisma REST client with comprehensive error handling
 - **Milestone 02**: FastAPI transcription endpoint with audio validation
 - **Milestone 03**: React/Vite operator dashboard with real backend integration
-- **Milestone 04**: Deterministic emergency detection engine (current)
+- **Milestone 04**: Deterministic emergency detection engine
+- **Milestone 04.1**: Detection engine hardening with structured utterances (current)
 
 Not yet implemented: realtime audio streaming, SQLite persistence, or Timbre text-to-speech.
 
-## Milestone 04 status
+See [Milestone 04.1 Documentation](docs/milestone-04.1-detection-hardening.md) for detailed technical specifications.
+
+## Emergency Detection
 
 This milestone adds a deterministic, explainable emergency indicator detection engine. The engine applies rule-based pattern matching to identify potential cardiac-respiratory emergencies requiring immediate CPR protocol review.
 
@@ -250,8 +251,11 @@ All emergency indicators require human review and confirmation.
 - No staged recording is included in the repository; private recordings are intentionally ignored.
 - REST is limited to 30 seconds per request by the documented API.
 - Compressed-file duration cannot be inspected locally without an additional media decoder; the upstream API enforces its duration limit.
-- Emergency detection analyzes the full transcript as a single utterance; structured multi-utterance input would improve accuracy.
+- Sentence boundary detection uses simple regex splitting; may break on abbreviations.
+- Speaker diarization requires manual annotation; automatic diarization not yet integrated.
 - No audio denoising, AudioWorklet capture, WebSocket streaming, or SQLite storage exists yet.
+
+See [Milestone 04.1 Known Limitations](docs/milestone-04.1-detection-hardening.md#known-limitations) for detailed analysis.
 
 ## Error handling
 
@@ -304,11 +308,23 @@ cd frontend
 npm run build
 ```
 
-## Next milestone
+## Next milestones
 
-Priority tasks:
+Recommended priorities:
+
+### Milestone 05: Gnani Prisma WebSocket Streaming (High Priority)
+Replace REST API polling with real-time WebSocket streaming for live call transcription. See [Milestone 04.1 Next Steps](docs/milestone-04.1-detection-hardening.md#milestone-05-gnani-prisma-websocket-streaming-high-priority) for detailed specification.
+
+**Key Features:**
+- Real-time utterance streaming
+- Sub-second detection latency
+- Live operator dashboard updates
+
+### Milestone 06: Advanced Negation & Temporal Reasoning (Medium Priority)
+Implement sophisticated negation handling with contextual analysis and temporal reasoning.
+
+### Other priorities:
 1. Run authenticated live Prisma test with real Kannada-English recording
-2. Improve emergency detection with structured multi-utterance transcripts
-3. Add SQLite persistence for call records and detection history
-4. Implement operator acknowledgment logging
-5. Add Timbre text-to-speech for protocol prompts
+2. Add SQLite persistence for call records and detection history
+3. Implement operator acknowledgment logging
+4. Add Timbre text-to-speech for protocol prompts
