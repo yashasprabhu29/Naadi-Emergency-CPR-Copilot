@@ -19,15 +19,15 @@ IMPORTANT:
 import sys
 from pathlib import Path
 
-# Add backend to path
-backend_path = Path(__file__).parent.parent
-sys.path.insert(0, str(backend_path))
+# Add project root to path so we can import backend.app modules
+project_root = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(project_root))
 
 import os
 import time
-from app.config import get_settings
-from app.services.prisma_client import PrismaClient, PrismaClientError
-from app.services.timbre_client import TimbreClient, TimbreClientError
+from backend.app.config import get_settings
+from backend.app.services.prisma_client import PrismaClient, PrismaClientError
+from backend.app.services.timbre_client import TimbreClient, TimbreClientError
 
 def print_header(title):
     """Print formatted header."""

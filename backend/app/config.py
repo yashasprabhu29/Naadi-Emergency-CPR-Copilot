@@ -1,9 +1,20 @@
 """Application configuration loaded from environment variables."""
 
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+# Find .env file at project root regardless of where the script runs
+def _find_env_file() -> Path:
+    """Locate .env file at project root."""
+    # Start from this config.py file location
+    config_dir = Path(__file__).parent  # backend/app/
+    backend_dir = config_dir.parent  # backend/
+    project_root = backend_dir.parent  # project root
+    return project_root / ".env"
 
 
 class Settings(BaseSettings):
@@ -13,7 +24,7 @@ class Settings(BaseSettings):
     """
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(_find_env_file()),
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=False,
