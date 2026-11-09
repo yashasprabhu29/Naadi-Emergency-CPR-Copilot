@@ -82,7 +82,22 @@ app.include_router(access_router)
 app.include_router(calls_router)
 app.include_router(streaming_router)
 
-_STATIC_DIR = settings.naadi_static_dir if settings.naadi_static_dir and (settings.naadi_static_dir / "index.html").is_file() else None
+def _find_static_dir() -> Path | None:
+    """The built frontend: NAADI_STATIC_DIR if set, else frontend/dist in the project."""
+
+    project_root = Path(__file__).resolve().parents[2]
+    candidates = [settings.naadi_static_dir, project_root / "frontend" / "dist"]
+    for candidate in candidates:
+        if candidate is None:
+            continue
+        candidate = candidate if candidate.is_absolute() else project_root / candidate
+        if (candidate / "index.html").is_file() and (candidate / "assets").is_dir():
+            return candidate
+    return None
+
+
+_STATIC_DIR = _find_static_dir()
+logger.info("Serving built frontend from %s", _STATIC_DIR or "nowhere (API only)")
 
 
 if _STATIC_DIR is None:
