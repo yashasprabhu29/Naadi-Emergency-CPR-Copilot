@@ -1,6 +1,17 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
+// Fonts are bundled and served from our own origin (no third-party requests).
+import "@fontsource/ibm-plex-sans/400.css";
+import "@fontsource/ibm-plex-sans/500.css";
+import "@fontsource/ibm-plex-sans/600.css";
+import "@fontsource/ibm-plex-mono/400.css";
+import "@fontsource/ibm-plex-mono/500.css";
+import "@fontsource/noto-sans-kannada/400.css";
+import "@fontsource/noto-sans-kannada/500.css";
+import "@fontsource/noto-sans-devanagari/400.css";
+import "@fontsource/noto-sans-devanagari/500.css";
+
 import App from "./App.jsx";
 import "./styles/index.css";
 

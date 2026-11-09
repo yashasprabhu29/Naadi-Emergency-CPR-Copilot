@@ -1,0 +1,35 @@
+# Render Blueprint: https://render.com/docs/blueprint-spec
+# New > Blueprint, pick this repo and branch, then fill in the two secrets.
+services:
+  - type: web
+    name: naadi
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/v1/health
+    autoDeploy: true
+    envVars:
+      # Secrets: Render asks for these when the Blueprint is created.
+      - key: GNANI_API_KEY
+        sync: false
+      - key: NAADI_ACCESS_CODE
+        sync: false
+      # Prisma settings
+      - key: GNANI_MODEL
+        value: prisma-v3.0
+      - key: GNANI_LANGUAGE_CODE
+        value: kn-IN,en-IN
+      - key: GNANI_FORMAT
+        value: codemix
+      # Daily caps to protect the 5,000 programme credits
+      - key: NAADI_DAILY_TRANSCRIPTIONS
+        value: "150"
+      - key: NAADI_DAILY_LIVE_MINUTES
+        value: "60"
+      - key: NAADI_DAILY_TTS
+        value: "60"
+      - key: STREAM_MAX_SECONDS
+        value: "600"
+      - key: STREAM_MAX_SESSIONS
+        value: "1"

@@ -37,6 +37,7 @@ class HealthResponse(BaseModel):
     version: str
     gnani_api_key_configured: bool
     prisma_model: str
+    access_required: bool = False
 
 
 class UtteranceInput(BaseModel):

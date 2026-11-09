@@ -4,3 +4,7 @@ python-multipart==0.0.9
 pydantic-settings==2.6.1
 pytest==8.3.3
 uvicorn==0.32.0
+# WebSocket server support for FastAPI and the Gnani realtime client
+websockets==17.4
+# Lets `uvicorn --reload` pick up changes to .env
+watchfiles==1.3.0

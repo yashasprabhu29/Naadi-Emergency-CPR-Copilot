@@ -11,9 +11,18 @@ Completed milestones:
 - **Milestone 02**: FastAPI transcription endpoint with audio validation
 - **Milestone 03**: React/Vite operator dashboard with real backend integration
 - **Milestone 04**: Deterministic emergency detection engine
-- **Milestone 04.1**: Detection engine hardening with structured utterances (current)
+- **Milestone 04.1**: Detection engine hardening with structured utterances
+- **Milestone 05**: Realtime streaming. The browser streams the microphone to `WS /api/v1/stream`, which relays 1,024-byte PCM frames to Gnani Prisma realtime STT. Detection reruns after every sentence and the console records time to flag.
+- **Milestone 06**: Timbre CPR coaching. After the operator reviews a flag, the console plays a fixed, pre-written hands-only CPR instruction in Kannada, Hindi or English (Gnani Timbre v3.0), then a 110 per minute metronome with a live compression count. Prompts are cached in memory, so replays cost no credits.
+- **Milestone 07**: SQLite call log. `Save call` stores the transcript, detection result, timings, ground-truth label and noise condition (`/api/v1/calls`). The Call log page reports arrests flagged, false flags and median time to flag on the labelled set, and exports CSV.
 
-Not yet implemented: realtime audio streaming, SQLite persistence, or Timbre text-to-speech.
+Not yet implemented: telephony (SIP/CTI) integration, clinician-reviewed scripts beyond the three launch languages, and user accounts.
+
+### Things verified against the live Gnani API (9 Nov 2026)
+
+- Realtime STT accepts exactly one `language_code` per session, even though the docs show lists. Live calls use the first code in `GNANI_LANGUAGE_CODE`, or `GNANI_STREAM_LANGUAGE_CODE` if set.
+- Prisma v3.0 on realtime needs the `x-model` header; the relay sends both `model` and `x-model`.
+- Timbre returns WAV with placeholder sizes (`0xFFFFFFFF`) in the header. The backend repairs the header before returning audio, and the upload validator measures real WAV length.
 
 See [Milestone 04.1 Documentation](docs/milestone-04.1-detection-hardening.md) for detailed technical specifications.
 
@@ -74,8 +83,10 @@ Build the frontend for production with `npm run build` from `frontend`.
 
 ```bash
 source .venv/bin/activate
-uvicorn backend.app.main:app --reload
+python -m backend.scripts.dev_server
 ```
+
+The dev server reloads when backend code or `.env` changes, so a newly pasted `GNANI_API_KEY` takes effect without a restart. Saved calls go to `data/naadi.sqlite3` (ignored by Git); set `NAADI_DB_PATH` to move it. One live microphone session runs at a time (`STREAM_MAX_SESSIONS`), capped at 10 minutes (`STREAM_MAX_SECONDS`), to protect credits.
 
 Open Swagger at <http://127.0.0.1:8000/docs>.
 
@@ -132,6 +143,27 @@ npm run dev
 ```
 
 Open <http://localhost:5173>. Set `VITE_API_BASE_URL` in `frontend/.env` when the backend is not running at `http://127.0.0.1:8000`. The dashboard reads the real `/api/v1/health` response and sends uploads to `/api/v1/transcriptions`; it does not contain or request a Gnani API key. FastAPI explicitly allows the local Vite origins configured by `CORS_ALLOWED_ORIGINS`.
+
+### Deploy on Render
+
+The repo has a `Dockerfile` (builds the site, then runs FastAPI serving the site and API from one origin) and a `render.yaml` Blueprint.
+
+1. In Render: **New > Blueprint**, connect this repository and choose the branch to deploy.
+2. When asked, set `GNANI_API_KEY` (your Gnani key) and `NAADI_ACCESS_CODE` (a long code you give to judges and testers).
+3. Create the Blueprint. The site is served at `https://<service-name>.onrender.com`.
+
+Notes: the free plan sleeps after about 15 minutes idle (the first request then takes about 30 seconds), and the SQLite call log resets on each redeploy unless you attach a persistent disk and point `NAADI_DB_PATH` at it. Export the call log as CSV before redeploying. Daily caps (`NAADI_DAILY_*`) reset at midnight UTC and on restart.
+
+To test the image locally: `docker build -t naadi .` then `docker run --env-file .env -e NAADI_ACCESS_CODE=test -p 10000:10000 naadi`, and open <http://localhost:10000>.
+
+### Pages and hosting notes
+
+- Routes: `/` (operator console), `/privacy` (privacy policy), `/terms` (terms and conditions). Any other path shows a 404 page.
+- The routes use the browser path, so a static host must serve `index.html` for unknown paths (SPA fallback). Vite's dev and preview servers already do this.
+- Contact email, team description and the "last updated" date for the legal pages live in `frontend/src/site.js`. Update the legal pages if data handling changes (for example, if transcripts are ever stored).
+- Fonts (IBM Plex Sans and Mono, Noto Sans Kannada and Devanagari) are bundled from `@fontsource`, so the site makes no third-party requests.
+- Icons live in `frontend/public`. After editing `favicon.svg`, regenerate the PNGs with `python frontend/scripts/render-icons.py` (needs PyMuPDF).
+- When deploying, add the production origin to `CORS_ALLOWED_ORIGINS` on the backend.
 
 ## Run a Prisma transcription
 
