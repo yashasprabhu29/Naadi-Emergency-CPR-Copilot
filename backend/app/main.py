@@ -52,25 +52,66 @@ app = FastAPI(
     ),
     version=settings.app_version,
 )
+from backend.app.access import (  # noqa: E402
+    ACCESS_HEADER,
+    AccessCodeMiddleware,
+    SecurityHeadersMiddleware,
+    access_required,
+    daily_limit_response,
+    quota,
+)
+from backend.app.access import router as access_router  # noqa: E402
+
+# Order matters: the last middleware added runs first. CORS stays outermost so
+# that 401 responses from the access check still carry CORS headers.
+app.add_middleware(AccessCodeMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_credentials=False,
-    allow_methods=["GET", "POST"],
-    allow_headers=["Accept", "Content-Type"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE"],
+    allow_headers=["Accept", "Content-Type", ACCESS_HEADER],
 )
 
+# Access check, saved-call log (SQLite) and live microphone relay (Gnani realtime STT).
+from backend.app.calls_api import router as calls_router  # noqa: E402
+from backend.app.streaming import router as streaming_router  # noqa: E402
 
-@app.get("/")
-def metadata() -> dict[str, str]:
-    """Return safe application metadata."""
+app.include_router(access_router)
+app.include_router(calls_router)
+app.include_router(streaming_router)
 
-    return {
-        "name": settings.app_name,
-        "version": settings.app_version,
-        "environment": settings.environment,
-        "status": "ok",
-    }
+def _find_static_dir() -> Path | None:
+    """The built frontend: NAADI_STATIC_DIR if set, else frontend/dist in the project."""
+
+    project_root = Path(__file__).resolve().parents[2]
+    candidates = [settings.naadi_static_dir, project_root / "frontend" / "dist"]
+    for candidate in candidates:
+        if candidate is None:
+            continue
+        candidate = candidate if candidate.is_absolute() else project_root / candidate
+        if (candidate / "index.html").is_file() and (candidate / "assets").is_dir():
+            return candidate
+    return None
+
+
+_STATIC_DIR = _find_static_dir()
+logger.info("Serving built frontend from %s", _STATIC_DIR or "nowhere (API only)")
+
+
+if _STATIC_DIR is None:
+    # Without a built frontend, "/" describes the API. In the Docker image it serves the site.
+    @app.get("/")
+    def metadata() -> dict[str, str]:
+        """Return safe application metadata."""
+
+        return {
+            "name": settings.app_name,
+            "version": settings.app_version,
+            "environment": settings.environment,
+            "status": "ok",
+        }
 
 
 @app.get("/health")
@@ -83,6 +124,7 @@ def health() -> dict[str, object]:
         "version": settings.app_version,
         "gnani_api_key_configured": settings.has_gnani_api_key,
         "prisma_model": settings.gnani_model,
+        "access_required": access_required(),
     }
 
 
@@ -144,6 +186,7 @@ def api_health() -> HealthResponse:
         version=settings.app_version,
         gnani_api_key_configured=settings.has_gnani_api_key,
         prisma_model=settings.gnani_model,
+        access_required=access_required(),
     )
 
 
@@ -244,6 +287,9 @@ async def create_transcription(
                 "EMPTY_AUDIO",
                 "The uploaded audio file is empty.",
             )
+
+        if not quota.try_consume("transcriptions"):
+            return daily_limit_response("transcriptions")
 
         try:
             # PrismaClient is synchronous because it also supports the CLI. Run
@@ -403,6 +449,11 @@ from backend.app.services.timbre_client import (
 from backend.app.schemas import TTSRequest, TTSPromptsResponse
 from fastapi.responses import Response
 
+# Synthesised prompts are fixed text, so cache them in memory: replaying a
+# CPR instruction must not wait on the network or spend credits again.
+_PROMPT_CACHE: dict[tuple[str, str | None, float], tuple[bytes, str]] = {}
+_PROMPT_CACHE_LIMIT = 32
+
 
 @app.post(
     "/api/v1/tts/synthesize-prompt",
@@ -415,15 +466,21 @@ from fastapi.responses import Response
 )
 async def synthesize_emergency_prompt(request: TTSRequest) -> Response:
     """Synthesize a predefined emergency coaching prompt.
-    
+
     Only predefined, reviewed emergency prompts are allowed. This prevents
     unrestricted medical instruction generation. Prompts are returned as
-    WAV audio for operator-triggered playback.
-    
-    Returns:
-        Binary WAV audio file
+    WAV audio for operator-triggered playback, and cached after the first call.
     """
-    
+
+    cache_key = (request.prompt_id, request.voice, round(request.speed, 2))
+    cached = _PROMPT_CACHE.get(cache_key)
+    if cached is not None:
+        audio, media_type = cached
+        return Response(content=audio, media_type=media_type, headers={"X-Naadi-Cache": "hit"})
+
+    if not quota.try_consume("tts"):
+        return daily_limit_response("tts")
+
     try:
         client = TimbreClient()
         result = await run_in_threadpool(
@@ -432,49 +489,23 @@ async def synthesize_emergency_prompt(request: TTSRequest) -> Response:
             voice=request.voice,
             speed=request.speed,
         )
-        
-        return Response(
-            content=result.audio_bytes,
-            media_type=result.content_type,
-            headers={
-                "X-Audio-Duration-Estimate": f"{result.audio_duration_estimate:.2f}"
-                if result.audio_duration_estimate
-                else "unknown",
-            },
-        )
-    
     except TimbreConfigurationError as exc:
-        return JSONResponse(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            content=ErrorResponse(
-                code="TTS_NOT_CONFIGURED",
-                message=str(exc),
-            ).model_dump(),
-        )
+        return _error_response(status.HTTP_503_SERVICE_UNAVAILABLE, "TTS_NOT_CONFIGURED", str(exc))
     except TimbreValidationError as exc:
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content=ErrorResponse(
-                code="INVALID_REQUEST",
-                message=str(exc),
-            ).model_dump(),
-        )
+        return _error_response(status.HTTP_400_BAD_REQUEST, "INVALID_REQUEST", str(exc))
     except TimbreAPIError as exc:
-        return JSONResponse(
-            status_code=exc.status_code if exc.status_code >= 500 else 400,
-            content=ErrorResponse(
-                code=exc.error_code,
-                message=exc.message,
-            ).model_dump(),
-        )
+        return _error_response(_upstream_status(exc.status_code), exc.error_code, exc.message)
     except TimbreNetworkError as exc:
-        return JSONResponse(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            content=ErrorResponse(
-                code="TTS_NETWORK_ERROR",
-                message=str(exc),
-            ).model_dump(),
-        )
+        return _error_response(status.HTTP_502_BAD_GATEWAY, "TTS_NETWORK_ERROR", str(exc))
+
+    if len(_PROMPT_CACHE) >= _PROMPT_CACHE_LIMIT:
+        _PROMPT_CACHE.pop(next(iter(_PROMPT_CACHE)))
+    _PROMPT_CACHE[cache_key] = (result.audio_bytes, result.content_type)
+    return Response(
+        content=result.audio_bytes,
+        media_type=result.content_type,
+        headers={"X-Naadi-Cache": "miss"},
+    )
 
 
 @app.get(
@@ -496,3 +527,25 @@ async def list_emergency_prompts() -> TTSPromptsResponse:
         prompts=prompts,
         model="timbre-v3.0",
     )
+
+
+# ---------- Built frontend (production) ----------
+# Registered last so every API route above takes precedence.
+if _STATIC_DIR is not None:
+    from fastapi.responses import FileResponse
+    from fastapi.staticfiles import StaticFiles
+
+    _STATIC_ROOT = _STATIC_DIR.resolve()
+    app.mount("/assets", StaticFiles(directory=_STATIC_ROOT / "assets"), name="assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False, response_model=None)
+    def frontend(full_path: str) -> FileResponse | JSONResponse:
+        """Serve built files, and index.html for client-side routes like /privacy."""
+
+        if full_path.startswith("api/"):
+            return _error_response(status.HTTP_404_NOT_FOUND, "NOT_FOUND", "No such API endpoint.")
+        candidate = (_STATIC_ROOT / full_path).resolve()
+        if full_path and candidate.is_file() and candidate.is_relative_to(_STATIC_ROOT):
+            return FileResponse(candidate)
+        # index.html must not be cached, so a new deploy shows up on reload.
+        return FileResponse(_STATIC_ROOT / "index.html", headers={"Cache-Control": "no-cache"})

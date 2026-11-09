@@ -1,154 +1,78 @@
-import { useCallback, useState } from "react";
+import { useEffect, useState } from "react";
 
-import { AudioUploadPanel } from "./components/AudioUploadPanel.jsx";
-import { CallInfoPanel } from "./components/CallInfoPanel.jsx";
-import { EmergencyPanel } from "./components/EmergencyPanel.jsx";
-import { SystemStatus } from "./components/SystemStatus.jsx";
+import { Footer } from "./components/Footer.jsx";
 import { TopBar } from "./components/TopBar.jsx";
-import { TranscriptPanel } from "./components/TranscriptPanel.jsx";
 import { useSystemHealth } from "./hooks/useSystemHealth.js";
-import { transcribeAudio, analyzeEmergency } from "./services/api.js";
-import { parseTranscriptToUtterances } from "./utils/utteranceParser.js";
+import { CallLogPage } from "./pages/CallLogPage.jsx";
+import { ConsolePage } from "./pages/ConsolePage.jsx";
+import { NotFoundPage } from "./pages/NotFoundPage.jsx";
+import { PrivacyPage } from "./pages/PrivacyPage.jsx";
+import { TermsPage } from "./pages/TermsPage.jsx";
+import { AccessGate } from "./pages/AccessGate.jsx";
+import { usePath } from "./router.jsx";
+import { ACCESS_REQUIRED_EVENT, getAccessCode } from "./services/api.js";
 
-function currentCallState(status) {
-  if (status === "uploading") return "TRANSCRIBING";
-  if (status === "success") return "REVIEW TRANSCRIPT";
-  if (status === "error") return "ACTION REQUIRED";
-  return "READY FOR INTAKE";
-}
+const TITLES = {
+  "/": "Naadi | Emergency call-taker copilot",
+  "/calls": "Call log | Naadi",
+  "/privacy": "Privacy policy | Naadi",
+  "/terms": "Terms and conditions | Naadi",
+};
 
 export default function App() {
+  const path = usePath();
   const { health, status: healthStatus, error: healthError, refresh } = useSystemHealth();
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [fileError, setFileError] = useState("");
-  const [transcriptionStatus, setTranscriptionStatus] = useState("idle");
-  const [transcriptionError, setTranscriptionError] = useState("");
-  const [result, setResult] = useState(null);
-  const [notes, setNotes] = useState("");
-  const [emergencyAnalysis, setEmergencyAnalysis] = useState(null);
-  const [emergencyAnalyzing, setEmergencyAnalyzing] = useState(false);
-  const [emergencyError, setEmergencyError] = useState("");
+  const [callState, setCallState] = useState("Ready for intake");
+  const [hasCode, setHasCode] = useState(() => Boolean(getAccessCode()));
 
-  const handleFileSelected = useCallback((file, validationError) => {
-    setSelectedFile(file);
-    setFileError(validationError || "");
-    setTranscriptionError("");
-    if (validationError) {
-      setTranscriptionStatus("idle");
-      setResult(null);
-      setEmergencyAnalysis(null);
-    }
+  const isConsole = path === "/";
+  // Public deployments ask for the access code before the console or call log.
+  const locked = Boolean(health?.access_required) && !hasCode && (isConsole || path === "/calls");
+
+  useEffect(() => {
+    document.title = TITLES[path] || "Page not found | Naadi";
+  }, [path]);
+
+  useEffect(() => {
+    const relock = () => setHasCode(false);
+    window.addEventListener(ACCESS_REQUIRED_EVENT, relock);
+    return () => window.removeEventListener(ACCESS_REQUIRED_EVENT, relock);
   }, []);
 
-  const handleSubmit = useCallback(async () => {
-    if (!selectedFile || fileError || transcriptionStatus === "uploading") return;
-
-    setTranscriptionStatus("uploading");
-    setTranscriptionError("");
-    setResult(null);
-    setEmergencyAnalysis(null);
-    setEmergencyError("");
-
-    try {
-      const transcription = await transcribeAudio(selectedFile);
-      setResult(transcription);
-      setTranscriptionStatus("success");
-
-      // Automatically analyze transcript for emergency indicators
-      // Parse transcript into structured utterances with unique IDs
-      if (transcription.transcript) {
-        setEmergencyAnalyzing(true);
-        try {
-          const utterances = parseTranscriptToUtterances(
-            transcription.transcript,
-            "caller",
-            {
-              language: transcription.detected_language || null,
-              confidence: transcription.confidence || null,
-              source: "sentence_boundary",
-            }
-          );
-          const analysis = await analyzeEmergency(utterances);
-          setEmergencyAnalysis(analysis);
-        } catch (error) {
-          setEmergencyError(error.message || "Emergency analysis failed.");
-        } finally {
-          setEmergencyAnalyzing(false);
-        }
-      }
-    } catch (error) {
-      setTranscriptionError(error.message || "The transcription request failed.");
-      setTranscriptionStatus("error");
-    }
-  }, [fileError, selectedFile, transcriptionStatus]);
-
-  const handleEmergencyConfirm = useCallback(() => {
-    // In a real system, this would log the operator acknowledgment
-    // and potentially trigger next steps in the protocol
-    console.log("Operator acknowledged emergency detection at:", new Date().toISOString());
-  }, []);
-
-  const transcriptPanelError = transcriptionError || fileError;
+  let page;
+  if (locked) {
+    page = <AccessGate onUnlocked={() => setHasCode(true)} />;
+  } else if (isConsole) {
+    page = (
+      <ConsolePage
+        health={health}
+        healthStatus={healthStatus}
+        healthError={healthError}
+        onRefreshHealth={refresh}
+        onCallStateChange={setCallState}
+      />
+    );
+  } else if (path === "/calls") {
+    page = <CallLogPage />;
+  } else if (path === "/privacy") {
+    page = <PrivacyPage />;
+  } else if (path === "/terms") {
+    page = <TermsPage />;
+  } else {
+    page = <NotFoundPage />;
+  }
 
   return (
     <div className="app-shell">
+      <a className="skip-link" href="#main">Skip to content</a>
       <TopBar
-        backendStatus={healthStatus}
+        path={path}
+        backendStatus={isConsole && !locked ? healthStatus : undefined}
         prismaConfigured={Boolean(health?.gnani_api_key_configured)}
-        callState={currentCallState(transcriptionStatus)}
+        callState={callState}
       />
-
-      <main className="dashboard-main">
-        <section className="page-intro">
-          <div>
-            <p className="eyebrow">OPERATOR CONSOLE / STAGED CALL WORKSPACE</p>
-            <h1>Understand the call. Support the response.</h1>
-            <p className="page-intro__copy">
-              Load a short recording to establish a verified multilingual transcript for human review.
-            </p>
-          </div>
-          <div className="prototype-note">
-            <span className="prototype-note__signal" aria-hidden="true" />
-            <div><strong>Prototype mode</strong><span>Decision support only · No emergency service connection</span></div>
-          </div>
-        </section>
-
-        <div className="dashboard-grid dashboard-grid--primary">
-          <AudioUploadPanel
-            selectedFile={selectedFile}
-            onFileSelected={handleFileSelected}
-            onSubmit={handleSubmit}
-            status={transcriptionStatus}
-            error={fileError}
-          />
-          <TranscriptPanel
-            result={result}
-            status={transcriptionStatus}
-            error={transcriptPanelError}
-          />
-        </div>
-
-        <div className="dashboard-grid dashboard-grid--secondary">
-          <EmergencyPanel
-            analysis={emergencyAnalysis}
-            onConfirm={handleEmergencyConfirm}
-            isAnalyzing={emergencyAnalyzing}
-            error={emergencyError}
-          />
-          <CallInfoPanel notes={notes} onNotesChange={setNotes} />
-          <SystemStatus
-            healthStatus={healthStatus}
-            health={health}
-            error={healthError}
-            onRefresh={() => refresh()}
-          />
-        </div>
-      </main>
-
-      <footer className="app-footer">
-        <span>NAADI / INTERNAL OPERATOR WORKSPACE</span>
-        <span>Gnani Prisma REST · Human review required</span>
-      </footer>
+      <div key={`${path}-${locked}`} className="page">{page}</div>
+      <Footer />
     </div>
   );
 }

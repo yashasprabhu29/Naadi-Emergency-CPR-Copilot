@@ -7,7 +7,8 @@ from typing import Any
 
 import httpx
 
-from backend.app.config import Settings, get_settings
+from backend.app.config import MISSING_KEY_MESSAGE, Settings, get_settings
+from backend.app.services.wav_utils import repair_wav_header
 
 
 # Predefined emergency coaching prompts (medically reviewed placeholders)
@@ -217,10 +218,7 @@ class TimbreClient:
         """
         
         if not self.settings.has_gnani_api_key:
-            raise TimbreConfigurationError(
-                "GNANI_API_KEY is not configured. Copy .env.example to .env "
-                "and set the key locally."
-            )
+            raise TimbreConfigurationError(MISSING_KEY_MESSAGE)
         
         # Validate inputs
         if not text or not text.strip():
@@ -315,7 +313,9 @@ class TimbreClient:
                 "Expected audio but received JSON response."
             )
         
-        audio_bytes = response.content
+        # Timbre streams WAV with placeholder sizes in the header; fix them so
+        # browsers and the wave module read the real duration.
+        audio_bytes = repair_wav_header(response.content)
         
         if len(audio_bytes) == 0:
             raise TimbreAPIError(200, "EMPTY_AUDIO", "Received empty audio response.")
@@ -347,6 +347,9 @@ class TimbreClient:
             prompt_id: {
                 "language": prompt["language"],
                 "description": prompt["description"],
+                # Shown on screen while the prompt plays, so the operator
+                # knows exactly what the caller is hearing.
+                "text": prompt["text"],
             }
             for prompt_id, prompt in EMERGENCY_PROMPTS.items()
         }

@@ -29,10 +29,10 @@ export function parseTranscriptToUtterances(transcript, defaultSpeaker = "caller
   } = options;
 
   // Simple sentence splitting (basic implementation)
-  // Splits on sentence boundaries: . ! ?
+  // Splits on sentence boundaries: . ! ? and the Devanagari danda (। ॥)
   // Future: Use more sophisticated NLP or diarization data
   const sentences = transcript
-    .split(/[.!?]+/)
+    .split(/[.!?।॥]+/)
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
 

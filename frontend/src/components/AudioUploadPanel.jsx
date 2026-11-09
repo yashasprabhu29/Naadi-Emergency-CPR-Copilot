@@ -5,13 +5,16 @@ import {
   SUPPORTED_AUDIO_EXTENSIONS,
   validateAudioFile,
 } from "../services/api.js";
+import { formatDuration } from "../utils/audioDuration.js";
+import { ArrowRightIcon, CheckIcon, FileAudioIcon, UploadIcon } from "./Icons.jsx";
 
 function formatBytes(bytes) {
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  // Number() drops trailing zeros, so 25 MiB reads "25 MB" rather than "25.00 MB".
+  if (bytes < 1024 * 1024) return `${Number((bytes / 1024).toFixed(1))} KB`;
+  return `${Number((bytes / (1024 * 1024)).toFixed(2))} MB`;
 }
 
-export function AudioUploadPanel({ selectedFile, onFileSelected, onSubmit, status, error }) {
+export function AudioUploadPanel({ selectedFile, fileDuration, onFileSelected, onSubmit, status, error, modeSwitch }) {
   const inputRef = useRef(null);
   const [isDragging, setIsDragging] = useState(false);
   const isUploading = status === "uploading";
@@ -23,27 +26,36 @@ export function AudioUploadPanel({ selectedFile, onFileSelected, onSubmit, statu
 
   function handleInputChange(event) {
     handleFile(event.target.files?.[0] || null);
+    // Allow choosing the same file again after an error.
+    event.target.value = "";
   }
 
   function handleDrop(event) {
     event.preventDefault();
     setIsDragging(false);
+    if (isUploading) return;
     handleFile(event.dataTransfer.files?.[0] || null);
   }
 
+  const dropzoneClass = [
+    "dropzone",
+    isDragging ? "dropzone--active" : "",
+    selectedFile && !error ? "dropzone--selected" : "",
+  ].filter(Boolean).join(" ");
+
   return (
-    <section className="panel upload-panel" aria-labelledby="upload-title">
+    <section className="panel upload-panel reveal" style={{ "--reveal-order": 1 }} aria-labelledby="upload-title">
       <div className="panel-heading">
         <div>
-          <p className="eyebrow">STAGED AUDIO INTAKE</p>
+          <p className="eyebrow"><span className="eyebrow__index">01</span>Staged audio</p>
           <h2 id="upload-title">Load a call recording</h2>
         </div>
-        <span className="panel-index">01</span>
+        {modeSwitch}
       </div>
 
       <div
-        className={`dropzone ${isDragging ? "dropzone--active" : ""} ${selectedFile ? "dropzone--selected" : ""}`}
-        onDragEnter={(event) => { event.preventDefault(); setIsDragging(true); }}
+        className={dropzoneClass}
+        onDragEnter={(event) => { event.preventDefault(); if (!isUploading) setIsDragging(true); }}
         onDragOver={(event) => event.preventDefault()}
         onDragLeave={() => setIsDragging(false)}
         onDrop={handleDrop}
@@ -58,33 +70,37 @@ export function AudioUploadPanel({ selectedFile, onFileSelected, onSubmit, statu
           onChange={handleInputChange}
           disabled={isUploading}
         />
-        <div className="dropzone-icon" aria-hidden="true">⇧</div>
-        <p className="dropzone-title">Drop an emergency-call recording here</p>
-        <p className="dropzone-copy">or choose a file from this workstation</p>
+        <span className="dropzone__icon"><UploadIcon size={20} /></span>
+        <p className="dropzone__title">Drop a staged call recording here</p>
+        <p className="dropzone__copy">Use role-play calls with made-up names and places only.</p>
         <button
           type="button"
           className="button button--secondary"
           onClick={() => inputRef.current?.click()}
           disabled={isUploading}
         >
-          Browse recordings
+          Browse files
         </button>
       </div>
 
-      <div className="upload-constraints">
-        <span>WAV · MP3 · OGG · FLAC · AAC · M4A</span>
-        <span>Maximum 30 seconds via Prisma</span>
-        <span>Local limit {formatBytes(MAX_UPLOAD_SIZE_BYTES)}</span>
-      </div>
+      <ul className="upload-constraints" aria-label="Upload requirements">
+        <li>WAV, MP3, OGG, FLAC, AAC or M4A</li>
+        <li>Up to 30 seconds of audio</li>
+        <li>File size up to {formatBytes(MAX_UPLOAD_SIZE_BYTES)}</li>
+      </ul>
 
       {selectedFile && (
-        <div className="selected-file" aria-label="Selected audio file">
-          <div className="file-icon" aria-hidden="true">♫</div>
+        <div className={`selected-file${error ? " selected-file--invalid" : ""}`} aria-label="Selected audio file">
+          <span className="selected-file__icon"><FileAudioIcon /></span>
           <div className="selected-file__meta">
-            <strong>{selectedFile.name}</strong>
-            <span>{formatBytes(selectedFile.size)} · ready for transcription</span>
+            <strong title={selectedFile.name}>{selectedFile.name}</strong>
+            <span>
+              {formatBytes(selectedFile.size)}
+              {fileDuration != null ? `, ${formatDuration(fileDuration)}` : ""}
+              {error ? "" : ", ready to transcribe"}
+            </span>
           </div>
-          <span className="selected-file__check" aria-label="File selected">✓</span>
+          {!error && <span className="selected-file__check" aria-label="File selected"><CheckIcon size={16} /></span>}
         </div>
       )}
 
@@ -104,7 +120,7 @@ export function AudioUploadPanel({ selectedFile, onFileSelected, onSubmit, statu
         disabled={!selectedFile || Boolean(error) || isUploading}
       >
         {isUploading ? "Transcribing recording" : "Transcribe staged call"}
-        {!isUploading && <span aria-hidden="true">→</span>}
+        {!isUploading && <ArrowRightIcon size={16} />}
       </button>
     </section>
   );

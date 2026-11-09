@@ -10,7 +10,7 @@ from typing import Any
 
 import httpx
 
-from backend.app.config import Settings, get_settings
+from backend.app.config import MISSING_KEY_MESSAGE, Settings, get_settings
 
 
 SUPPORTED_AUDIO_EXTENSIONS = frozenset({".wav", ".mp3", ".ogg", ".flac", ".aac", ".m4a"})
@@ -104,6 +104,27 @@ def _api_error_from_response(response: httpx.Response, api_key: str) -> PrismaAP
     return PrismaAPIError(response.status_code, error_code, safe_message)
 
 
+def _wav_duration(audio_path: Path, frame_rate: int, frame_count: int, bytes_per_frame: int) -> float:
+    """Return a WAV file's real duration in seconds.
+
+    Streamed WAVs (including Gnani Timbre output) often carry placeholder
+    sizes such as 0xFFFFFFFF in the header. When the header claims more audio
+    than the file holds, measure the bytes after the ``data`` chunk instead.
+    """
+
+    if bytes_per_frame <= 0:
+        return frame_count / frame_rate
+
+    head = audio_path.read_bytes()[:65536]
+    marker = head.find(b"data")
+    if marker == -1:
+        return frame_count / frame_rate
+
+    available_bytes = max(audio_path.stat().st_size - (marker + 8), 0)
+    available_frames = available_bytes // bytes_per_frame
+    return min(frame_count, available_frames) / frame_rate
+
+
 def validate_audio_file(audio_path: Path) -> float | None:
     """Validate extension, existence, size and inspectable WAV duration.
 
@@ -130,9 +151,10 @@ def validate_audio_file(audio_path: Path) -> float | None:
             with wave.open(str(audio_path), "rb") as wav_file:
                 frame_rate = wav_file.getframerate()
                 frame_count = wav_file.getnframes()
+                bytes_per_frame = wav_file.getnchannels() * wav_file.getsampwidth()
                 if frame_rate <= 0:
                     raise AudioValidationError("WAV file has an invalid sample rate.")
-                duration = frame_count / frame_rate
+                duration = _wav_duration(audio_path, frame_rate, frame_count, bytes_per_frame)
         except (wave.Error, EOFError) as exc:
             raise AudioValidationError(f"WAV file could not be parsed: {exc}") from exc
         if duration > MAX_REST_DURATION_SECONDS:
@@ -167,10 +189,7 @@ class PrismaClient:
         """Submit a staged recording to the official Prisma REST endpoint."""
 
         if not self.settings.has_gnani_api_key:
-            raise PrismaConfigurationError(
-                "GNANI_API_KEY is not configured. Copy .env.example to .env "
-                "and set the key locally."
-            )
+            raise PrismaConfigurationError(MISSING_KEY_MESSAGE)
 
         path = Path(audio_path)
         validate_audio_file(path)

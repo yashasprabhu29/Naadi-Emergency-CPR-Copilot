@@ -22,8 +22,21 @@ const health = {
   prisma_model: "prisma-v3.0",
 };
 
+// A real (tiny) 16 kHz mono PCM WAV: 44-byte header plus 0.1 s of silence.
+function wavBytes(seconds = 0.1) {
+  const rate = 16000;
+  const dataSize = Math.round(rate * seconds) * 2;
+  const view = new DataView(new ArrayBuffer(44 + dataSize));
+  const write = (offset, text) => [...text].forEach((c, i) => view.setUint8(offset + i, c.charCodeAt(0)));
+  write(0, "RIFF"); view.setUint32(4, 36 + dataSize, true); write(8, "WAVE");
+  write(12, "fmt "); view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+  view.setUint32(24, rate, true); view.setUint32(28, rate * 2, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+  write(36, "data"); view.setUint32(40, dataSize, true);
+  return new Uint8Array(view.buffer);
+}
+
 function audioFile(name = "call.wav", type = "audio/wav") {
-  return new File([new Uint8Array([1, 2, 3])], name, { type });
+  return new File([wavBytes()], name, { type });
 }
 
 describe("Naadi operator dashboard", () => {
@@ -36,7 +49,7 @@ describe("Naadi operator dashboard", () => {
     render(<App />);
 
     expect(screen.getByRole("heading", { name: /understand the call/i })).toBeInTheDocument();
-    expect(screen.getByText("Emergency detection engine ready.")).toBeInTheDocument();
+    expect(screen.getByText("Detection engine ready")).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText("Configured")).toBeInTheDocument());
     expect(screen.getByText("Backend online")).toBeInTheDocument();
   });

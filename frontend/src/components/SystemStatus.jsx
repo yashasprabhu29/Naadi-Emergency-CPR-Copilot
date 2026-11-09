@@ -1,3 +1,4 @@
+import { RefreshIcon } from "./Icons.jsx";
 import { StatusBadge } from "./StatusBadge.jsx";
 
 export function SystemStatus({ healthStatus, health, error, onRefresh }) {
@@ -5,25 +6,26 @@ export function SystemStatus({ healthStatus, health, error, onRefresh }) {
   const checking = healthStatus === "checking";
 
   return (
-    <section className="panel system-panel" aria-labelledby="system-title">
+    <section className="panel system-panel reveal" style={{ "--reveal-order": 5 }} aria-labelledby="system-title">
       <div className="panel-heading">
         <div>
-          <p className="eyebrow">SYSTEM MONITOR</p>
+          <p className="eyebrow"><span className="eyebrow__index">05</span>Services</p>
           <h2 id="system-title">System status</h2>
         </div>
-        <StatusBadge tone={online ? "success" : checking ? "warning" : "danger"}>
+        <StatusBadge tone={online ? "success" : checking ? "warning" : "danger"} pulse={checking}>
           {online ? "Operational" : checking ? "Checking" : "Attention"}
         </StatusBadge>
       </div>
-      <div className="system-facts">
-        <div><span>FastAPI backend</span><strong>{online ? "Connected" : checking ? "Checking" : "Offline"}</strong></div>
-        <div><span>Prisma credentials</span><strong>{health?.gnani_api_key_configured ? "Configured" : "Not configured"}</strong></div>
-        <div><span>Application version</span><strong>{health?.version || "—"}</strong></div>
-        <div><span>Prisma model</span><strong>{health?.prisma_model || "—"}</strong></div>
-      </div>
+      <dl className="facts facts--compact">
+        <div><dt>FastAPI backend</dt><dd>{online ? "Connected" : checking ? "Checking" : "Offline"}</dd></div>
+        <div><dt>Gnani API key</dt><dd>{health?.gnani_api_key_configured ? "Configured" : "Not configured"}</dd></div>
+        <div><dt>Prisma model</dt><dd>{health?.prisma_model ? <span className="mono">{health.prisma_model}</span> : "Unavailable"}</dd></div>
+        <div><dt>App version</dt><dd>{health?.version ? <span className="mono">{health.version}</span> : "Unavailable"}</dd></div>
+      </dl>
       {error && <p className="system-error">{error}</p>}
       <button type="button" className="button button--ghost" onClick={onRefresh} disabled={checking}>
-        Refresh connection
+        <RefreshIcon size={16} className={checking ? "icon--spin" : ""} />
+        Check again
       </button>
     </section>
   );
