@@ -4,6 +4,8 @@ Naadi is a decision-support prototype for emergency call-takers handling multili
 
 Naadi is not a medical device, an emergency service, or an integration with 108/112 infrastructure.
 
+**Live demo:** https://naadi-emergency.onrender.com · **One-page solution pitch:** [PITCH.md](PITCH.md)
+
 ## Current Status
 
 Completed milestones:
