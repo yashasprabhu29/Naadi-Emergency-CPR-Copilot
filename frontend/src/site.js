@@ -2,8 +2,10 @@
 export const SITE = {
   name: "Naadi",
   nameKannada: "ನಾಡಿ",
-  operator: "the Naadi project team at Vidyavardhaka College of Engineering, Mysuru, Karnataka, India",
-  contactEmail: "shamanthms1@gmail.com",
+  operator: "the Naadi project team",
+  // Public contact point: issues on the project's GitHub repository.
+  repoUrl: "https://github.com/yashasprabhu29/Naadi-Emergency-CPR-Copilot",
+  contactUrl: "https://github.com/yashasprabhu29/Naadi-Emergency-CPR-Copilot/issues",
   legalUpdated: "9 November 2026",
   emergencyNumbers: "108 or 112",
 };

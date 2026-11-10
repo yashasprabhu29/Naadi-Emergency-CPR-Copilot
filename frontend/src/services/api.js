@@ -6,46 +6,7 @@ export const API_BASE_URL = (
   import.meta.env.VITE_API_BASE_URL ?? DEFAULT_API_BASE_URL
 ).replace(/\/$/, "");
 
-// ---------- Access code (public deployments) ----------
-// Kept in sessionStorage, so it is forgotten when the tab closes.
-const ACCESS_KEY = "naadi-access-code";
-export const ACCESS_REQUIRED_EVENT = "naadi:access-required";
 
-export function getAccessCode() {
-  try {
-    return window.sessionStorage.getItem(ACCESS_KEY) || "";
-  } catch {
-    return "";
-  }
-}
-
-export function setAccessCode(code) {
-  try {
-    window.sessionStorage.setItem(ACCESS_KEY, code);
-  } catch {
-    // storage blocked; the code then lasts only until reload
-  }
-}
-
-export function clearAccessCode() {
-  try {
-    window.sessionStorage.removeItem(ACCESS_KEY);
-  } catch {
-    // ignore
-  }
-}
-
-function withAccess(headers = {}) {
-  const code = getAccessCode();
-  return code ? { ...headers, "X-Naadi-Access": code } : headers;
-}
-
-function noticeAccessDenied(status, code) {
-  if (status === 401 && (code === "ACCESS_CODE_REQUIRED" || code === "ACCESS_CODE_INVALID")) {
-    clearAccessCode();
-    window.dispatchEvent(new Event(ACCESS_REQUIRED_EVENT));
-  }
-}
 
 export const SUPPORTED_AUDIO_EXTENSIONS = [
   ".wav",
@@ -108,7 +69,7 @@ async function parseResponse(response) {
 async function requestJson(path, options = {}) {
   let response;
   try {
-    response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers: withAccess(options.headers) });
+    response = await fetch(`${API_BASE_URL}${path}`, options);
   } catch (error) {
     if (error?.name === "AbortError") {
       throw error;
@@ -122,7 +83,6 @@ async function requestJson(path, options = {}) {
   const body = await parseResponse(response);
   if (!response.ok) {
     const detail = body?.error;
-    noticeAccessDenied(response.status, detail?.code);
     throw new ApiError(detail?.message || `Backend request failed (${response.status}).`, {
       status: response.status,
       code: detail?.code || "HTTP_ERROR",
@@ -209,11 +169,11 @@ export function streamUrl() {
   return `${scheme}://${window.location.host}/api/v1/stream`;
 }
 
-/** fetch() with the access header and the shared network/access handling. */
-async function fetchWithAccess(path, options = {}) {
+/** fetch() with shared network and error handling, for non-JSON responses. */
+async function fetchChecked(path, options = {}) {
   let response;
   try {
-    response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers: withAccess(options.headers) });
+    response = await fetch(`${API_BASE_URL}${path}`, options);
   } catch {
     throw new ApiError("Cannot reach the Naadi backend. Check that FastAPI is running.", { code: "NETWORK_ERROR" });
   }
@@ -227,31 +187,9 @@ async function fetchWithAccess(path, options = {}) {
     } catch {
       // keep the generic message
     }
-    noticeAccessDenied(response.status, code);
     throw new ApiError(message, { status: response.status, code });
   }
   return response;
-}
-
-export async function verifyAccessCode(code) {
-  let response;
-  try {
-    response = await fetch(`${API_BASE_URL}/api/v1/access/verify`, {
-      method: "POST",
-      headers: { Accept: "application/json", "Content-Type": "application/json" },
-      body: JSON.stringify({ code }),
-    });
-  } catch {
-    throw new ApiError("Cannot reach the Naadi backend.", { code: "NETWORK_ERROR" });
-  }
-  if (response.status === 204) return true;
-  let message = "That access code is not right.";
-  try {
-    message = (await response.json())?.error?.message || message;
-  } catch {
-    // keep the default message
-  }
-  throw new ApiError(message, { status: response.status, code: "ACCESS_CODE_INVALID" });
 }
 
 // ---------- Timbre CPR coaching prompts ----------
@@ -266,7 +204,7 @@ export async function listPrompts({ signal } = {}) {
 export async function getPromptAudioUrl(promptId) {
   if (promptAudioCache.has(promptId)) return promptAudioCache.get(promptId);
 
-  const response = await fetchWithAccess("/api/v1/tts/synthesize-prompt", {
+  const response = await fetchChecked("/api/v1/tts/synthesize-prompt", {
     method: "POST",
     headers: { Accept: "audio/wav, application/json", "Content-Type": "application/json" },
     body: JSON.stringify({ prompt_id: promptId }),
@@ -303,7 +241,7 @@ export async function updateCall(id, changes) {
 }
 
 async function requestNoContent(path, options) {
-  await fetchWithAccess(path, options);
+  await fetchChecked(path, options);
 }
 
 export async function deleteCall(id) {
@@ -314,9 +252,9 @@ export async function deleteAllCalls() {
   return requestNoContent("/api/v1/calls", { method: "DELETE" });
 }
 
-/** Downloads the call log as CSV (a plain link could not send the access code). */
+/** Downloads the call log as CSV and reports errors instead of opening a JSON page. */
 export async function downloadCallsCsv() {
-  const response = await fetchWithAccess("/api/v1/calls/export.csv", { headers: { Accept: "text/csv" } });
+  const response = await fetchChecked("/api/v1/calls/export.csv", { headers: { Accept: "text/csv" } });
   const url = URL.createObjectURL(await response.blob());
   const link = document.createElement("a");
   link.href = url;

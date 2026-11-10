@@ -25,14 +25,7 @@ from websockets.exceptions import ConnectionClosed, InvalidStatus
 
 from urllib.parse import urlparse
 
-from backend.app.access import (
-    DAILY_LIMIT_MESSAGES,
-    access_required,
-    client_ip,
-    code_matches,
-    failed_attempts,
-    quota,
-)
+from backend.app.limits import DAILY_LIMIT_MESSAGES, quota
 from backend.app.config import MISSING_KEY_MESSAGE, get_settings
 
 logger = logging.getLogger("naadi.stream")
@@ -140,20 +133,6 @@ async def stream(websocket: WebSocket) -> None:
     if not settings.has_gnani_api_key:
         await _fail(websocket, "GNANI_NOT_CONFIGURED", MISSING_KEY_MESSAGE)
         return
-
-    if access_required():
-        ip = client_ip(websocket)
-        if failed_attempts.blocked(ip):
-            await _fail(websocket, "TOO_MANY_ATTEMPTS", "Too many wrong codes. Wait 10 minutes and try again.", 1008)
-            return
-        try:
-            first = json.loads(await asyncio.wait_for(websocket.receive_text(), timeout=5))
-        except Exception:  # noqa: BLE001 - timeout, binary frame, bad JSON or disconnect
-            first = {}
-        if not (isinstance(first, dict) and first.get("type") == "auth" and code_matches(first.get("code"))):
-            failed_attempts.record(ip)
-            await _fail(websocket, "ACCESS_CODE_REQUIRED", "Enter the access code to use Naadi.", 1008)
-            return
 
     remaining = quota.remaining("live_seconds")
     if remaining < 5:

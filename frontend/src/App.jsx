@@ -8,9 +8,7 @@ import { ConsolePage } from "./pages/ConsolePage.jsx";
 import { NotFoundPage } from "./pages/NotFoundPage.jsx";
 import { PrivacyPage } from "./pages/PrivacyPage.jsx";
 import { TermsPage } from "./pages/TermsPage.jsx";
-import { AccessGate } from "./pages/AccessGate.jsx";
 import { usePath } from "./router.jsx";
-import { ACCESS_REQUIRED_EVENT, getAccessCode } from "./services/api.js";
 
 const TITLES = {
   "/": "Naadi | Emergency call-taker copilot",
@@ -23,26 +21,15 @@ export default function App() {
   const path = usePath();
   const { health, status: healthStatus, error: healthError, refresh } = useSystemHealth();
   const [callState, setCallState] = useState("Ready for intake");
-  const [hasCode, setHasCode] = useState(() => Boolean(getAccessCode()));
 
   const isConsole = path === "/";
-  // Public deployments ask for the access code before the console or call log.
-  const locked = Boolean(health?.access_required) && !hasCode && (isConsole || path === "/calls");
 
   useEffect(() => {
     document.title = TITLES[path] || "Page not found | Naadi";
   }, [path]);
 
-  useEffect(() => {
-    const relock = () => setHasCode(false);
-    window.addEventListener(ACCESS_REQUIRED_EVENT, relock);
-    return () => window.removeEventListener(ACCESS_REQUIRED_EVENT, relock);
-  }, []);
-
   let page;
-  if (locked) {
-    page = <AccessGate onUnlocked={() => setHasCode(true)} />;
-  } else if (isConsole) {
+  if (isConsole) {
     page = (
       <ConsolePage
         health={health}
@@ -67,11 +54,11 @@ export default function App() {
       <a className="skip-link" href="#main">Skip to content</a>
       <TopBar
         path={path}
-        backendStatus={isConsole && !locked ? healthStatus : undefined}
+        backendStatus={isConsole ? healthStatus : undefined}
         prismaConfigured={Boolean(health?.gnani_api_key_configured)}
         callState={callState}
       />
-      <div key={`${path}-${locked}`} className="page">{page}</div>
+      <div key={path} className="page">{page}</div>
       <Footer />
     </div>
   );

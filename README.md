@@ -149,12 +149,12 @@ Open <http://localhost:5173>. Set `VITE_API_BASE_URL` in `frontend/.env` when th
 The repo has a `Dockerfile` (builds the site, then runs FastAPI serving the site and API from one origin) and a `render.yaml` Blueprint.
 
 1. In Render: **New > Blueprint**, connect this repository and choose the branch to deploy.
-2. When asked, set `GNANI_API_KEY` (your Gnani key) and `NAADI_ACCESS_CODE` (a long code you give to judges and testers).
+2. When asked, set `GNANI_API_KEY` (your Gnani key). The site is open to everyone; the daily caps below protect the credits.
 3. Create the Blueprint. The site is served at `https://<service-name>.onrender.com`.
 
 Notes: the free plan sleeps after about 15 minutes idle (the first request then takes about 30 seconds), and the SQLite call log resets on each redeploy unless you attach a persistent disk and point `NAADI_DB_PATH` at it. Export the call log as CSV before redeploying. Daily caps (`NAADI_DAILY_*`) reset at midnight UTC and on restart.
 
-To test the image locally: `docker build -t naadi .` then `docker run --env-file .env -e NAADI_ACCESS_CODE=test -p 10000:10000 naadi`, and open <http://localhost:10000>.
+To test the image locally: `docker build -t naadi .` then `docker run --env-file .env -p 10000:10000 naadi`, and open <http://localhost:10000>.
 
 ### Pages and hosting notes
 
