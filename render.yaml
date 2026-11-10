@@ -13,8 +13,6 @@ services:
       # Secrets: Render asks for these when the Blueprint is created.
       - key: GNANI_API_KEY
         sync: false
-      - key: NAADI_ACCESS_CODE
-        sync: false
       # Prisma settings
       - key: GNANI_MODEL
         value: prisma-v3.0

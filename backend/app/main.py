@@ -52,33 +52,22 @@ app = FastAPI(
     ),
     version=settings.app_version,
 )
-from backend.app.access import (  # noqa: E402
-    ACCESS_HEADER,
-    AccessCodeMiddleware,
-    SecurityHeadersMiddleware,
-    access_required,
-    daily_limit_response,
-    quota,
-)
-from backend.app.access import router as access_router  # noqa: E402
+from backend.app.limits import SecurityHeadersMiddleware, daily_limit_response, quota  # noqa: E402
 
-# Order matters: the last middleware added runs first. CORS stays outermost so
-# that 401 responses from the access check still carry CORS headers.
-app.add_middleware(AccessCodeMiddleware)
+# The last middleware added runs first, so CORS stays outermost.
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_credentials=False,
     allow_methods=["GET", "POST", "PATCH", "DELETE"],
-    allow_headers=["Accept", "Content-Type", ACCESS_HEADER],
+    allow_headers=["Accept", "Content-Type"],
 )
 
-# Access check, saved-call log (SQLite) and live microphone relay (Gnani realtime STT).
+# Saved-call log (SQLite) and live microphone relay (Gnani realtime STT).
 from backend.app.calls_api import router as calls_router  # noqa: E402
 from backend.app.streaming import router as streaming_router  # noqa: E402
 
-app.include_router(access_router)
 app.include_router(calls_router)
 app.include_router(streaming_router)
 
@@ -124,7 +113,6 @@ def health() -> dict[str, object]:
         "version": settings.app_version,
         "gnani_api_key_configured": settings.has_gnani_api_key,
         "prisma_model": settings.gnani_model,
-        "access_required": access_required(),
     }
 
 
@@ -186,7 +174,6 @@ def api_health() -> HealthResponse:
         version=settings.app_version,
         gnani_api_key_configured=settings.has_gnani_api_key,
         prisma_model=settings.gnani_model,
-        access_required=access_required(),
     )
 
 

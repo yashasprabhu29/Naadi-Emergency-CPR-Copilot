@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { ACCESS_REQUIRED_EVENT, clearAccessCode, getAccessCode, streamUrl } from "../services/api.js";
+import { streamUrl } from "../services/api.js";
 
 const ACCEPTED_RATES = new Set([8000, 16000, 44100, 48000]);
 
@@ -115,11 +115,6 @@ export function useLiveCall({ onTranscript } = {}) {
     const socket = new WebSocket(`${streamUrl()}?sample_rate=${context.sampleRate}`);
     socket.binaryType = "arraybuffer";
     resources.current = { stream, context, node, socket };
-    // Browsers cannot set headers on WebSockets, so the access code goes in the first message.
-    socket.onopen = () => {
-      const code = getAccessCode();
-      if (code) socket.send(JSON.stringify({ type: "auth", code }));
-    };
 
     let latestLevel = 0;
     node.port.onmessage = (event) => {
@@ -169,10 +164,6 @@ export function useLiveCall({ onTranscript } = {}) {
         callbackRef.current?.(next, startedAt.current);
       } else if (message.type === "error") {
         setError(message.message || "The live session failed.");
-        if (message.code === "ACCESS_CODE_REQUIRED") {
-          clearAccessCode();
-          window.dispatchEvent(new Event(ACCESS_REQUIRED_EVENT));
-        }
       } else if (message.type === "ended") {
         updateStatus("ended");
       }

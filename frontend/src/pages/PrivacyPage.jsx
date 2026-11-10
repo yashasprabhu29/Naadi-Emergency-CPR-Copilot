@@ -2,7 +2,7 @@ import { Link } from "../router.jsx";
 import { SITE } from "../site.js";
 import { LegalPage } from "./LegalPage.jsx";
 
-const mail = <a href={`mailto:${SITE.contactEmail}`}>{SITE.contactEmail}</a>;
+const contact = <a href={SITE.contactUrl} target="_blank" rel="noreferrer">opening an issue on the project&apos;s GitHub page</a>;
 
 const sections = [
   {
@@ -11,7 +11,7 @@ const sections = [
     body: (
       <p>
         Naadi is a student prototype built by {SITE.operator}, for Gnani AI&apos;s Great Indian AI Internship
-        Challenge. It is not a company, an emergency service or a medical service. You can reach us at {mail}.
+        Challenge. It is not a company, an emergency service or a medical service. You can reach us by {contact}.
       </p>
     ),
   },
@@ -77,8 +77,7 @@ const sections = [
     body: (
       <p>
         Naadi sets no cookies and uses no analytics, advertising or tracking scripts. Fonts and icons are served from our own
-        server, so loading the site does not contact any third party. On the public demo, the access code you enter is kept
-        in your browser&apos;s session storage for this tab only, and is deleted when you close the tab.
+        server, so loading the site does not contact any third party.
       </p>
     ),
   },
@@ -110,8 +109,8 @@ const sections = [
     body: (
       <p>
         You can use the console without uploading or saving anything, and delete saved calls yourself on the Call log page.
-        If you think we hold personal data about you, or you want something removed from our logs, write to {mail} and we
-        will reply within 30 days.
+        If you think we hold personal data about you, or you want something removed from our logs, let us know by {contact}
+        (do not include personal details in the issue) and we will reply within 30 days.
       </p>
     ),
   },

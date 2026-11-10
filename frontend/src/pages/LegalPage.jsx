@@ -90,7 +90,7 @@ export function LegalPage({ title, intro, highlights, sections, related }) {
             </section>
           ))}
           <p className="legal-article__contact">
-            Questions? Write to <a href={`mailto:${SITE.contactEmail}`}>{SITE.contactEmail}</a>.
+            Questions? Open an issue on the <a href={SITE.contactUrl} target="_blank" rel="noreferrer">project&apos;s GitHub page</a>.
           </p>
         </article>
       </div>

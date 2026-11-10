@@ -75,8 +75,7 @@ class Settings(BaseSettings):
     gnani_stream_url: str = Field(
         default="wss://api.vachana.ai/stt/v3/stream", validation_alias="GNANI_STREAM_URL"
     )
-    # Public deployment protection. Leave the code empty for local development.
-    naadi_access_code: str | None = Field(default=None, validation_alias="NAADI_ACCESS_CODE")
+    # Daily caps that protect the Gnani credits on the public site.
     naadi_daily_transcriptions: int = Field(default=150, ge=0, validation_alias="NAADI_DAILY_TRANSCRIPTIONS")
     naadi_daily_live_minutes: int = Field(default=60, ge=0, validation_alias="NAADI_DAILY_LIVE_MINUTES")
     naadi_daily_tts: int = Field(default=60, ge=0, validation_alias="NAADI_DAILY_TTS")
